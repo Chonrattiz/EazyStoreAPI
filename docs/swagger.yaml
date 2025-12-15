@@ -1,6 +1,34 @@
 basePath: /
 definitions:
+  models.LoginInput:
+    properties:
+      password:
+        type: string
+      username:
+        description: รับค่ามาเป็น "username" แต่เราจะเอาไปเช็คว่าเป็น Email หรือ เบอร์โทร
+          ใน Controller
+        type: string
+    required:
+    - password
+    - username
+    type: object
   models.Product:
+    type: object
+  models.RegisterInput:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+      phone:
+        type: string
+      username:
+        type: string
+    required:
+    - email
+    - password
+    - phone
+    - username
     type: object
 host: localhost:8080
 info:
@@ -9,6 +37,51 @@ info:
   title: EazyStore API
   version: "1.0"
 paths:
+  /api/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: ล็อกอินด้วย Username, Email หรือ เบอร์โทรศัพท์
+      parameters:
+      - description: ข้อมูลสำหรับ Login
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.LoginInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: เข้าสู่ระบบ (Login)
+      tags:
+      - Auth
+  /api/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: ลงทะเบียนผู้ใช้ใหม่เข้าสู่ระบบ
+      parameters:
+      - description: ข้อมูลสำหรับสมัครสมาชิก
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/models.RegisterInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'status: success'
+          schema:
+            type: object
+      summary: สมัครสมาชิกใหม่
+      tags:
+      - Auth
   /products:
     get:
       consumes:

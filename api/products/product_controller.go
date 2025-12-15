@@ -2,7 +2,7 @@ package controllers
 
 import (
 	"EazyStoreAPI/database"
-	models "EazyStoreAPI/model"
+	models "EazyStoreAPI/models"
 	"net/http"
 
 	"github.com/gin-gonic/gin"

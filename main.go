@@ -3,9 +3,11 @@ package main
 
 import (
 	"EazyStoreAPI/database"
-	"EazyStoreAPI/routes"
-
 	_ "EazyStoreAPI/docs" // ⭐ สำคัญมาก: import swagger docs
+	"EazyStoreAPI/routes" // <--- เพิ่ม import นี้
+	"log"
+
+	"github.com/joho/godotenv" // <--- เพิ่ม import นี้
 
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -17,6 +19,11 @@ import (
 // @host            localhost:8080
 // @BasePath        /
 func main() {
+	// 1. โหลดไฟล์ .env ก่อนเริ่มทำงาน
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file") // ถ้าหาไฟล์ไม่เจอให้แจ้งเตือน
+	}
 	// 1. เชื่อมต่อ Database
 	database.SetupDatabaseConnection()
 

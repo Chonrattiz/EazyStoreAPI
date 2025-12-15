@@ -9,6 +9,75 @@
     "host": "localhost:8080",
     "basePath": "/",
     "paths": {
+        "/api/auth/login": {
+            "post": {
+                "description": "ล็อกอินด้วย Username, Email หรือ เบอร์โทรศัพท์",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "เข้าสู่ระบบ (Login)",
+                "parameters": [
+                    {
+                        "description": "ข้อมูลสำหรับ Login",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.LoginInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/register": {
+            "post": {
+                "description": "ลงทะเบียนผู้ใช้ใหม่เข้าสู่ระบบ",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "สมัครสมาชิกใหม่",
+                "parameters": [
+                    {
+                        "description": "ข้อมูลสำหรับสมัครสมาชิก",
+                        "name": "input",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.RegisterInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "status: success",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        },
         "/products": {
             "get": {
                 "description": "แสดงสินค้าทั้งหมดในระบบ",
@@ -94,8 +163,47 @@
         }
     },
     "definitions": {
+        "models.LoginInput": {
+            "type": "object",
+            "required": [
+                "password",
+                "username"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string"
+                },
+                "username": {
+                    "description": "รับค่ามาเป็น \"username\" แต่เราจะเอาไปเช็คว่าเป็น Email หรือ เบอร์โทร ใน Controller",
+                    "type": "string"
+                }
+            }
+        },
         "models.Product": {
             "type": "object"
+        },
+        "models.RegisterInput": {
+            "type": "object",
+            "required": [
+                "email",
+                "password",
+                "phone",
+                "username"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
         }
     }
 }
