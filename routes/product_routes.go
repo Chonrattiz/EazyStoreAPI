@@ -2,6 +2,7 @@ package routes
 
 import (
 	controllers "EazyStoreAPI/api/products"
+	
 
 	"github.com/gin-gonic/gin"
 )
