@@ -9,9 +9,10 @@ type User struct {
     Username  string    `gorm:"column:username;not null" json:"username"`
     Password  string    `gorm:"column:password;not null" json:"password"`
     Phone     string    `gorm:"column:phone;unique;not null;size:10" json:"phone"`
-    Email     string    `gorm:"column:email;not null" json:"email"`
+    Email     string    `gorm:"unique;not null"` 
     CreatedAt time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 }
+
 
 // ฟังก์ชันนี้บอก GORM ว่า struct นี้คู่กับตารางชื่อ "users"
 func (User) TableName() string {
@@ -32,3 +33,4 @@ type LoginInput struct {
 	Username string `json:"username" binding:"required"` 
 	Password string `json:"password" binding:"required"`
 }
+
