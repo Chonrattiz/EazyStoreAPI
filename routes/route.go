@@ -20,6 +20,8 @@ import (
             auth.POST("/login", controllers.Login)
             // ✨ เพิ่มเส้นทางสำหรับกู้รหัสผ่านตรงนี้ครับ
             auth.POST("/request-reset", controllersReset.RequestResetOTP)
+            auth.POST("/verify-otp", controllersReset.VerifyOTP)
+            auth.POST("/reset-password", controllersReset.UpdatePassword)
         }
 
         // -----------------------------------------------------
