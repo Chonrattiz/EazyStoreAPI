@@ -11,6 +11,13 @@ type User struct {
     Phone     string    `gorm:"column:phone;unique;not null;size:10" json:"phone"`
     Email     string    `gorm:"unique;not null"` 
     CreatedAt time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+    IsVerified bool   `gorm:"default:false" json:"is_verified"` // ✨ เพิ่มฟิลด์นี้
+}
+// โครงสร้างสำหรับยืนยันอีเมลตอนสมัคร
+type EmailVerification struct {
+    Email     string    `gorm:"primaryKey;type:varchar(100)"`
+    OTPCode   string    `gorm:"not null"`
+    ExpiresAt time.Time `gorm:"not null"`
 }
 
 
@@ -33,4 +40,6 @@ type LoginInput struct {
 	Username string `json:"username" binding:"required"` 
 	Password string `json:"password" binding:"required"`
 }
+
+
 
