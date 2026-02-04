@@ -1,14 +1,14 @@
 package routes
 
 import (
-	controllers "EazyStoreAPI/api/products"
+	controllers "EazyStoreAPI/api/shops"
 	
 
 	"github.com/gin-gonic/gin"
 )
 
-func ProductRoutes(r *gin.Engine) {
-	r.POST("/createProduct", controllers.CreateProduct)
+func ShopRoutes(r *gin.Engine) {
+	r.POST("/createShop", controllers.CreateShop)
 	// r.GET("/products", controllers.GetProducts)
 	// r.PUT("/products/:id", controllers.UpdateProduct)
 }

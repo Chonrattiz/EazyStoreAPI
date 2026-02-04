@@ -15,6 +15,49 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/CreateShop": {
+            "post": {
+                "description": "สร้างร้านค้าใหม่ลงในฐานข้อมูล",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Shop"
+                ],
+                "summary": "เพิ่มร้านค้า",
+                "parameters": [
+                    {
+                        "description": "ข้อมูลร้านค้า",
+                        "name": "Shop",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.Shop"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Shop"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/auth/login": {
             "post": {
                 "description": "ล็อกอินด้วย Username, Email หรือ เบอร์โทรศัพท์",
@@ -62,7 +105,7 @@ const docTemplate = `{
                 "tags": [
                     "Auth"
                 ],
-                "summary": "สมัครสมาชิกใหม่",
+                "summary": "สมัครสมาชิก",
                 "parameters": [
                     {
                         "description": "ข้อมูลสำหรับสมัครสมาชิก",
@@ -84,9 +127,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/products": {
-            "get": {
-                "description": "แสดงสินค้าทั้งหมดในระบบ",
+        "/createProduct": {
+            "post": {
+                "description": "สร้างรายการสินค้าใหม่ลงในฐานข้อมูล",
                 "consumes": [
                     "application/json"
                 ],
@@ -94,41 +137,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Products"
+                    "Product"
                 ],
-                "summary": "ดึงรายการสินค้า",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/products/{id}": {
-            "put": {
-                "description": "แก้ไขข้อมูลสินค้าตาม ID",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Products"
-                ],
-                "summary": "อัปเดตข้อมูลสินค้าแล้วครับ",
+                "summary": "เพิ่มสินค้า",
                 "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Product ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
                     {
                         "description": "ข้อมูลสินค้า",
                         "name": "product",
@@ -148,15 +160,6 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -186,7 +189,64 @@ const docTemplate = `{
             }
         },
         "models.Product": {
-            "type": "object"
+            "type": "object",
+            "required": [
+                "category_id",
+                "cost_price",
+                "img_product",
+                "name",
+                "sell_price",
+                "shop_id",
+                "unit"
+            ],
+            "properties": {
+                "barcode": {
+                    "description": "[เทคนิค] Barcode ควรเป็น Pointer (*string) เพื่อรองรับค่า NULL",
+                    "type": "string",
+                    "example": "885123456789"
+                },
+                "category_id": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "cost_price": {
+                    "type": "number",
+                    "example": 10.5
+                },
+                "img_product": {
+                    "type": "string",
+                    "example": "https://image.url/cola.jpg"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "น้ำอัดลม โคล่า"
+                },
+                "product_id": {
+                    "type": "integer"
+                },
+                "sell_price": {
+                    "type": "number",
+                    "example": 15
+                },
+                "shop_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "status": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "stock": {
+                    "description": "gte=0 คือ มากกว่าหรือเท่ากับ 0",
+                    "type": "integer",
+                    "minimum": 0,
+                    "example": 100
+                },
+                "unit": {
+                    "type": "string",
+                    "example": "ขวด"
+                }
+            }
         },
         "models.RegisterInput": {
             "type": "object",
@@ -208,6 +268,49 @@ const docTemplate = `{
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "models.Shop": {
+            "type": "object",
+            "required": [
+                "address",
+                "name",
+                "phone",
+                "pin_code",
+                "user_id"
+            ],
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "example": "123 ถ.สุขุมวิท แขวงคลองเตย เขตคลองเตย กทม 10110"
+                },
+                "img_qrcode": {
+                    "type": "string",
+                    "example": "https://image.url/qrcode.jpg"
+                },
+                "img_shop": {
+                    "type": "string",
+                    "example": "https://image.url/homeshop.jpg"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "จันทร์เพ็ญ"
+                },
+                "phone": {
+                    "type": "string",
+                    "example": "0985490445"
+                },
+                "pin_code": {
+                    "type": "string",
+                    "example": "191047"
+                },
+                "shop_id": {
+                    "type": "integer"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
                 }
             }
         }

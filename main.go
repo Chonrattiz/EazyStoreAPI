@@ -3,7 +3,7 @@ package main
 
 import (
 	"EazyStoreAPI/database"
-	_ "EazyStoreAPI/docs" // ⭐ สำคัญมาก: import swagger docs
+	_ "EazyStoreAPI/docs" // import swagger docs
 	"EazyStoreAPI/routes" // <--- เพิ่ม import นี้
 	"log"
 

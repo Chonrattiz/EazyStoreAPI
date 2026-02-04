@@ -13,8 +13,7 @@ var DB *gorm.DB
 
 
 func SetupDatabaseConnection() {
-    // ⚠️ ใส่รหัสผ่านของคุณตรงนี้ (ถ้าไม่มีให้ลบ YOUR_PASSWORD ออกเหลือ "")
-    // รูปแบบ: user:password@tcp(host:port)/dbname
+   
   dsn := "66011212083:66011212083@tcp(202.28.34.210:3309)/db66011212083?charset=utf8mb4&parseTime=True&loc=Local"
 
     database, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
