@@ -15,10 +15,11 @@ import (
 // @Tags         Shop
 // @Accept       json
 // @Produce      json
+// @Security     BearerAuth
 // @Param        Shop body models.Shop true "ข้อมูลร้านค้า"
 // @Success      200  {object} models.Shop
 // @Failure      400  {object} map[string]string
-// @Router       /CreateShop [post]
+// @Router       /api/createShop [post]
 func CreateShop(c *gin.Context) {
 	var input models.Shop
 

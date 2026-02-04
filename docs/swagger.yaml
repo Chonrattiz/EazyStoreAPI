@@ -115,34 +115,6 @@ info:
   title: EazyStore API
   version: "1.0"
 paths:
-  /CreateShop:
-    post:
-      consumes:
-      - application/json
-      description: สร้างร้านค้าใหม่ลงในฐานข้อมูล
-      parameters:
-      - description: ข้อมูลร้านค้า
-        in: body
-        name: Shop
-        required: true
-        schema:
-          $ref: '#/definitions/models.Shop'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Shop'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: เพิ่มร้านค้า
-      tags:
-      - Shop
   /api/auth/login:
     post:
       consumes:
@@ -188,7 +160,7 @@ paths:
       summary: สมัครสมาชิก
       tags:
       - Auth
-  /createProduct:
+  /api/createProduct:
     post:
       consumes:
       - application/json
@@ -213,7 +185,44 @@ paths:
             additionalProperties:
               type: string
             type: object
+      security:
+      - BearerAuth: []
       summary: เพิ่มสินค้า
       tags:
       - Product
+  /api/createShop:
+    post:
+      consumes:
+      - application/json
+      description: สร้างร้านค้าใหม่ลงในฐานข้อมูล
+      parameters:
+      - description: ข้อมูลร้านค้า
+        in: body
+        name: Shop
+        required: true
+        schema:
+          $ref: '#/definitions/models.Shop'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Shop'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: เพิ่มร้านค้า
+      tags:
+      - Shop
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

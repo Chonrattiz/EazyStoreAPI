@@ -15,10 +15,11 @@ import (
 // @Tags         Product
 // @Accept       json
 // @Produce      json
+// @Security     BearerAuth
 // @Param        product body models.Product true "ข้อมูลสินค้า"
 // @Success      200  {object} models.Product
 // @Failure      400  {object} map[string]string
-// @Router       /createProduct [post]
+// @Router       /api/createProduct [post]
 func CreateProduct(c *gin.Context) {
 	var input models.Product
 

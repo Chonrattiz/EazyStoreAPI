@@ -8,5 +8,5 @@ type Shop struct {
 	Address   string `json:"address" binding:"required" example:"123 ถ.สุขุมวิท แขวงคลองเตย เขตคลองเตย กทม 10110"`
 	ImgQrcode string `json:"img_qrcode" example:"https://image.url/qrcode.jpg"`
 	ImgShop   string `json:"img_shop" example:"https://image.url/homeshop.jpg"`
-	Pincode   string `json:"pin_code" binding:"required,len=6" example:"191047"`
+	Pincode   string `json:"pin_code" gorm:"column:pin_code" binding:"required,len=6" example:"191047"`
 }

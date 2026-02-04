@@ -4,15 +4,6 @@ import "time"
 
 // User struct นี้แมพกับตาราง "users" ใน MySQL db66011212083
 type User struct {
-<<<<<<< HEAD
-	// ใช้ `gorm:"column:..."` เพื่อระบุชื่อ field ใน DB ให้ตรงเป๊ะ
-	UserID    uint      `gorm:"primaryKey;autoIncrement;column:user_id" json:"user_id"`
-	Username  string    `gorm:"column:username;not null" json:"username"`
-	Password  string    `gorm:"column:password;not null" json:"password"`
-	Phone     string    `gorm:"column:phone;unique;not null;size:10" json:"phone"`
-	Email     string    `gorm:"unique;not null"`
-	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
-=======
     // ใช้ `gorm:"column:..."` เพื่อระบุชื่อ field ใน DB ให้ตรงเป๊ะ
     UserID    uint      `gorm:"primaryKey;autoIncrement;column:user_id" json:"user_id"`
     Username  string    `gorm:"column:username;not null" json:"username"`
@@ -27,7 +18,6 @@ type EmailVerification struct {
     Email     string    `gorm:"primaryKey;type:varchar(100)"`
     OTPCode   string    `gorm:"not null"`
     ExpiresAt time.Time `gorm:"not null"`
->>>>>>> 4a3b27f7302871ce91a66803963b8933c067907c
 }
 
 // ฟังก์ชันนี้บอก GORM ว่า struct นี้คู่กับตารางชื่อ "users"
@@ -48,9 +38,6 @@ type LoginInput struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
-<<<<<<< HEAD
-=======
 
 
 
->>>>>>> 4a3b27f7302871ce91a66803963b8933c067907c
