@@ -20,24 +20,22 @@ type EmailVerification struct {
     ExpiresAt time.Time `gorm:"not null"`
 }
 
-
 // ฟังก์ชันนี้บอก GORM ว่า struct นี้คู่กับตารางชื่อ "users"
 func (User) TableName() string {
-    return "users"
+	return "users"
 }
-
 
 // RegisterInput ใช้สำหรับรับค่า JSON จากหน้าบ้านตอนสมัครสมาชิก
 type RegisterInput struct {
-    Username string `json:"username" binding:"required"`
-    Password string `json:"password" binding:"required"`
-    Phone    string `json:"phone" binding:"required"`
-    Email    string `json:"email" binding:"required,email"`
+	Username string `json:"username" binding:"required" example:"poder"`
+	Password string `json:"password" binding:"required" example:"123456"`
+	Phone    string `json:"phone" binding:"required"`
+	Email    string `json:"email" binding:"required,email"`
 }
 
 type LoginInput struct {
 	// รับค่ามาเป็น "username" แต่เราจะเอาไปเช็คว่าเป็น Email หรือ เบอร์โทร ใน Controller
-	Username string `json:"username" binding:"required"` 
+	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 

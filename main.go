@@ -18,6 +18,9 @@ import (
 // @description     API สำหรับระบบ EazyStore
 // @host            localhost:8080
 // @BasePath        /
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 func main() {
 	// 1. โหลดไฟล์ .env ก่อนเริ่มทำงาน
 	err := godotenv.Load()

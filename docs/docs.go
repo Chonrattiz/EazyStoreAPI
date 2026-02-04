@@ -15,49 +15,6 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/CreateShop": {
-            "post": {
-                "description": "สร้างร้านค้าใหม่ลงในฐานข้อมูล",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Shop"
-                ],
-                "summary": "เพิ่มร้านค้า",
-                "parameters": [
-                    {
-                        "description": "ข้อมูลร้านค้า",
-                        "name": "Shop",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.Shop"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Shop"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/api/auth/login": {
             "post": {
                 "description": "ล็อกอินด้วย Username, Email หรือ เบอร์โทรศัพท์",
@@ -127,8 +84,13 @@ const docTemplate = `{
                 }
             }
         },
-        "/createProduct": {
+        "/api/createProduct": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "สร้างรายการสินค้าใหม่ลงในฐานข้อมูล",
                 "consumes": [
                     "application/json"
@@ -156,6 +118,54 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/models.Product"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/createShop": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "สร้างร้านค้าใหม่ลงในฐานข้อมูล",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Shop"
+                ],
+                "summary": "เพิ่มร้านค้า",
+                "parameters": [
+                    {
+                        "description": "ข้อมูลร้านค้า",
+                        "name": "Shop",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.Shop"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Shop"
                         }
                     },
                     "400": {
@@ -261,13 +271,15 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "password": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "123456"
                 },
                 "phone": {
                     "type": "string"
                 },
                 "username": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "poder"
                 }
             }
         },
@@ -313,6 +325,13 @@ const docTemplate = `{
                     "example": 1
                 }
             }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }`
