@@ -23,7 +23,7 @@ func GenerateOTP() string {
 }
 
 // sendEmailOTP ส่ง SMTP ผ่าน Gmail
-func sendEmailOTP(targetEmail string, otpCode string) error {
+func SendEmailOTP(targetEmail string, otpCode string) error {
     from := "eazystorepos.official@gmail.com"
     password := "bxow wqtp lgks ahnn"
 
@@ -96,7 +96,7 @@ func RequestResetOTP(c *gin.Context) {
 
     // 4. ส่งเมลเบื้องหลังด้วย Goroutine
     go func() {
-        err := sendEmailOTP(input.Email, otp)
+        err := SendEmailOTP(input.Email, otp)
         if err != nil {
             fmt.Printf("Error sending email to %s: %v\n", input.Email, err)
         }

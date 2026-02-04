@@ -20,6 +20,10 @@ func SetupRouter() *gin.Engine {
 	{
 		auth.POST("/register", authController.Register)
 		auth.POST("/login", authController.Login)
+        auth.POST("/verify-registration", authController.VerifyRegistration)
+        auth.POST("/change-email-verify", authController.ChangeEmailBeforeVerify)
+
+        
 		//  เพิ่มเส้นทางสำหรับกู้รหัสผ่านตรงนี้ครับ
 		auth.POST("/request-reset", resetController.RequestResetOTP)
 		auth.POST("/verify-otp", resetController.VerifyOTP)
