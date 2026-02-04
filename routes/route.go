@@ -1,54 +1,53 @@
 package routes
 
 import (
-	controllersReset "EazyStoreAPI/api/ResetPassword"
-	controllers "EazyStoreAPI/api/auth"
+	resetController "EazyStoreAPI/api/ResetPassword"
+	authController "EazyStoreAPI/api/auth"
+	productController "EazyStoreAPI/api/products"
+    
 	"EazyStoreAPI/middleware"
 
 	"github.com/gin-gonic/gin"
 )
 
-    func SetupRouter() *gin.Engine {
-        r := gin.Default()
+func SetupRouter() *gin.Engine {
+	r := gin.Default()
 
-        // -----------------------------------------------------
-        // 🟢 โซน Public (ไม่ต้องใช้ Token)
-        // -----------------------------------------------------
-        auth := r.Group("/api/auth")
-        {
-            auth.POST("/register", controllers.Register)
-            auth.POST("/login", controllers.Login)
-            // ✨ เพิ่มเส้นทางสำหรับกู้รหัสผ่านตรงนี้ครับ
-            auth.POST("/request-reset", controllersReset.RequestResetOTP)
-            auth.POST("/verify-otp", controllersReset.VerifyOTP)
-            auth.POST("/reset-password", controllersReset.UpdatePassword)
-        }
+	// -----------------------------------------------------
+	// 🟢 โซน Public (ไม่ต้องใช้ Token)
+	// -----------------------------------------------------
+	auth := r.Group("/api/auth")
+	{
+		auth.POST("/register", authController.Register)
+		auth.POST("/login", authController.Login)
+		//  เพิ่มเส้นทางสำหรับกู้รหัสผ่านตรงนี้ครับ
+		auth.POST("/request-reset", resetController.RequestResetOTP)
+		auth.POST("/verify-otp", resetController.VerifyOTP)
+		auth.POST("/reset-password", resetController.UpdatePassword)
+	}
 
-        // -----------------------------------------------------
-        // 🔒 โซน Protected (ต้องมี Token เท่านั้นถึงจะเข้าได้)
-        // -----------------------------------------------------
-        // สร้างกลุ่ม api ใหม่ แล้วสั่ง Use(middleware.CheckAuth())
-        protected := r.Group("/api")
-        protected.Use(middleware.CheckAuth()) 
-        {
-            // ใส่เส้น API ของระบบร้านค้า หรือสินค้า ไว้ในนี้
-            // ตัวอย่าง:
-            // protected.GET("/myshop", shopController.GetMyShop)
-            // protected.POST("/product", productController.CreateProduct)
-            
-            // ทดสอบระบบ (Test Token)
-            protected.GET("/profile", func(c *gin.Context) {
-                // ลองดึงค่าที่ Middleware แปะไว้ให้ออกมาดู
-                userId, _ := c.Get("user_id")
-                username, _ := c.Get("username")
-                
-                c.JSON(200, gin.H{
-                    "message": "คุณเข้าสู่โซนปลอดภัยได้แล้ว!",
-                    "your_id": userId,
-                    "your_name": username,
-                })
-            })
-        }
+	// -----------------------------------------------------
+	//  โซน Protected (ต้องมี Token เท่านั้นถึงจะเข้าได้)
+	// -----------------------------------------------------
+	// สร้างกลุ่ม api ใหม่ แล้วสั่ง Use(middleware.CheckAuth())
+	protected := r.Group("/api")
+	protected.Use(middleware.CheckAuth())
+	{
+		protected.POST("/products", productController.CreateProduct)
 
-        return r
-    }
+		// ทดสอบระบบ (Test Token)
+		protected.GET("/profile", func(c *gin.Context) {
+			// ลองดึงค่าที่ Middleware แปะไว้ให้ออกมาดู
+			userId, _ := c.Get("user_id")
+			username, _ := c.Get("username")
+
+			c.JSON(200, gin.H{
+				"message":   "คุณเข้าสู่โซนปลอดภัยได้แล้ว!",
+				"your_id":   userId,
+				"your_name": username,
+			})
+		})
+	}
+
+	return r
+}

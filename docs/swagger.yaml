@@ -13,6 +13,50 @@ definitions:
     - username
     type: object
   models.Product:
+    properties:
+      barcode:
+        description: '[เทคนิค] Barcode ควรเป็น Pointer (*string) เพื่อรองรับค่า NULL'
+        example: "885123456789"
+        type: string
+      category_id:
+        example: 2
+        type: integer
+      cost_price:
+        example: 10.5
+        type: number
+      img_product:
+        example: https://image.url/cola.jpg
+        type: string
+      name:
+        example: น้ำอัดลม โคล่า
+        type: string
+      product_id:
+        type: integer
+      sell_price:
+        example: 15
+        type: number
+      shop_id:
+        example: 1
+        type: integer
+      status:
+        example: true
+        type: boolean
+      stock:
+        description: gte=0 คือ มากกว่าหรือเท่ากับ 0
+        example: 100
+        minimum: 0
+        type: integer
+      unit:
+        example: ขวด
+        type: string
+    required:
+    - category_id
+    - cost_price
+    - img_product
+    - name
+    - sell_price
+    - shop_id
+    - unit
     type: object
   models.RegisterInput:
     properties:
@@ -30,6 +74,38 @@ definitions:
     - phone
     - username
     type: object
+  models.Shop:
+    properties:
+      address:
+        example: 123 ถ.สุขุมวิท แขวงคลองเตย เขตคลองเตย กทม 10110
+        type: string
+      img_qrcode:
+        example: https://image.url/qrcode.jpg
+        type: string
+      img_shop:
+        example: https://image.url/homeshop.jpg
+        type: string
+      name:
+        example: จันทร์เพ็ญ
+        type: string
+      phone:
+        example: "0985490445"
+        type: string
+      pin_code:
+        example: "191047"
+        type: string
+      shop_id:
+        type: integer
+      user_id:
+        example: 1
+        type: integer
+    required:
+    - address
+    - name
+    - phone
+    - pin_code
+    - user_id
+    type: object
 host: localhost:8080
 info:
   contact: {}
@@ -37,6 +113,34 @@ info:
   title: EazyStore API
   version: "1.0"
 paths:
+  /CreateShop:
+    post:
+      consumes:
+      - application/json
+      description: สร้างร้านค้าใหม่ลงในฐานข้อมูล
+      parameters:
+      - description: ข้อมูลร้านค้า
+        in: body
+        name: Shop
+        required: true
+        schema:
+          $ref: '#/definitions/models.Shop'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Shop'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: เพิ่มร้านค้า
+      tags:
+      - Shop
   /api/auth/login:
     post:
       consumes:
@@ -79,36 +183,15 @@ paths:
           description: 'status: success'
           schema:
             type: object
-      summary: สมัครสมาชิกใหม่
+      summary: สมัครสมาชิก
       tags:
       - Auth
-  /products:
-    get:
+  /createProduct:
+    post:
       consumes:
       - application/json
-      description: แสดงสินค้าทั้งหมดในระบบ
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: ดึงรายการสินค้า
-      tags:
-      - Products
-  /products/{id}:
-    put:
-      consumes:
-      - application/json
-      description: แก้ไขข้อมูลสินค้าตาม ID
+      description: สร้างรายการสินค้าใหม่ลงในฐานข้อมูล
       parameters:
-      - description: Product ID
-        in: path
-        name: id
-        required: true
-        type: integer
       - description: ข้อมูลสินค้า
         in: body
         name: product
@@ -128,13 +211,7 @@ paths:
             additionalProperties:
               type: string
             type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: อัปเดตข้อมูลสินค้าแล้วครับ
+      summary: เพิ่มสินค้า
       tags:
-      - Products
+      - Product
 swagger: "2.0"

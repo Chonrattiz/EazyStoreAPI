@@ -2,64 +2,56 @@ package controllers
 
 import (
 	"EazyStoreAPI/database"
-	models "EazyStoreAPI/models"
 	"net/http"
+
+	"EazyStoreAPI/models"
 
 	"github.com/gin-gonic/gin"
 )
 
-// GetProducts godoc
-// @Summary      ดึงรายการสินค้า
-// @Description  แสดงสินค้าทั้งหมดในระบบ
-// @Tags         Products
+// CreateProduct godoc
+// @Summary      เพิ่มสินค้า
+// @Description  สร้างรายการสินค้าใหม่ลงในฐานข้อมูล
+// @Tags         Product
 // @Accept       json
 // @Produce      json
-// @Success      200 {object} map[string]interface{}
-// @Router       /products [get]
-func GetProducts(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Hello Swagger!",
-		"data":    []string{"Apple", "Banana"},
-	})
-}
-
-// UpdateProduct godoc
-// @Summary      อัปเดตข้อมูลสินค้าแล้วครับ
-// @Description  แก้ไขข้อมูลสินค้าตาม ID
-// @Tags         Products
-// @Accept       json
-// @Produce      json
-// @Param        id      path      int              true  "Product ID"
-// @Param        product body      models.Product   true  "ข้อมูลสินค้า"
-// @Success      200     {object}  models.Product
-// @Failure      400     {object}  map[string]string
-// @Failure      404     {object}  map[string]string
-// @Router       /products/{id} [put]
-func UpdateProduct(c *gin.Context) {
-	id := c.Param("id")
-
-	var product models.Product
-	if err := database.DB.First(&product, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Product not found",
-		})
-		return
-	}
-
+// @Param        product body models.Product true "ข้อมูลสินค้า"
+// @Success      200  {object} models.Product
+// @Failure      400  {object} map[string]string
+// @Router       /createProduct [post]
+func CreateProduct(c *gin.Context) {
 	var input models.Product
+
+	// 2. Validate Input
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	product.Name = input.Name
-	product.Price = input.Price
-	product.Description = input.Description
-	product.Stock = input.Stock
+	// 3. Map Input to Model (เรียกใช้ models.Product)
+	product := models.Product{
+		ShopID:     input.ShopID,
+		CategoryID: input.CategoryID,
+		Name:       input.Name,
+		Barcode:    input.Barcode,
+		ImgProduct: input.ImgProduct,
+		SellPrice:  input.SellPrice,
+		CostPrice:  input.CostPrice,
+		Stock:      input.Stock,
+		Unit:       input.Unit,
+		Status:     input.Status,
+		// ไม่ต้องใส่ ProductCode/ProductSeq เพราะ Trigger ใน DB จัดการให้
+	}
 
-	database.DB.Save(&product)
+	// 4. Insert into Database (เรียกใช้ database.DB หรือชื่อตัวแปรที่คุณตั้งใน package database)
+	if err := database.DB.Create(&product).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกสินค้าได้: " + err.Error()})
+		return
+	}
 
-	c.JSON(http.StatusOK, product)
+	// 5. Return Success
+	c.JSON(http.StatusOK, gin.H{
+		"message": "บันทึกสินค้าสำเร็จ",
+		"data":    product,
+	})
 }
