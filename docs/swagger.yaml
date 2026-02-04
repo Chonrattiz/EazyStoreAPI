@@ -63,10 +63,12 @@ definitions:
       email:
         type: string
       password:
+        example: "123456"
         type: string
       phone:
         type: string
       username:
+        example: poder
         type: string
     required:
     - email

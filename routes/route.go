@@ -4,7 +4,8 @@ import (
 	resetController "EazyStoreAPI/api/ResetPassword"
 	authController "EazyStoreAPI/api/auth"
 	productController "EazyStoreAPI/api/products"
-    
+	shopController "EazyStoreAPI/api/shops"
+
 	"EazyStoreAPI/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -33,7 +34,10 @@ func SetupRouter() *gin.Engine {
 	protected := r.Group("/api")
 	protected.Use(middleware.CheckAuth())
 	{
-		protected.POST("/products", productController.CreateProduct)
+
+		protected.POST("/createShop", shopController.CreateShop)
+
+		protected.POST("/createProduct", productController.CreateProduct)
 
 		// ทดสอบระบบ (Test Token)
 		protected.GET("/profile", func(c *gin.Context) {
