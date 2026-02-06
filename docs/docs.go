@@ -231,6 +231,9 @@ const docTemplate = `{
                     "type": "string",
                     "example": "น้ำอัดลม โคล่า"
                 },
+                "product_code": {
+                    "type": "string"
+                },
                 "product_id": {
                     "type": "integer"
                 },

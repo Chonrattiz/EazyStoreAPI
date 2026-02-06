@@ -1,10 +1,11 @@
 package models
 
 type Product struct {
-	ProductID  int    `json:"product_id" gorm:"primaryKey"`
-	ShopID     int    `json:"shop_id" binding:"required" example:"1"`
-	CategoryID int    `json:"category_id" binding:"required" example:"2"`
-	Name       string `json:"name" binding:"required" example:"น้ำอัดลม โคล่า"`
+	ProductID   int    `json:"product_id" gorm:"primaryKey"`
+	ShopID      int    `json:"shop_id" binding:"required" example:"1"`
+	CategoryID  int    `json:"category_id" binding:"required" example:"2"`
+	ProductCode string `json:"product_code" gorm:"unique"`
+	Name        string `json:"name" binding:"required" example:"น้ำอัดลม โคล่า"`
 	//[เทคนิค] Barcode ควรเป็น Pointer (*string) เพื่อรองรับค่า NULL
 	Barcode    *string `json:"barcode" example:"885123456789"`
 	ImgProduct string  `json:"img_product" binding:"required" example:"https://image.url/cola.jpg"`

@@ -30,6 +30,8 @@ definitions:
       name:
         example: น้ำอัดลม โคล่า
         type: string
+      product_code:
+        type: string
       product_id:
         type: integer
       sell_price:
