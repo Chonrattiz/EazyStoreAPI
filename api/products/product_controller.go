@@ -24,63 +24,58 @@ import (
 // @Failure      400  {object} map[string]string
 // @Router       /api/createProduct [post]
 func CreateProduct(c *gin.Context) {
-	// 1. ใช้ตัวแปร product รับค่าตรงๆ เลย (ลดการเขียน map ข้อมูลซ้ำซ้อน)
-	var product models.Product
 
-	if err := c.ShouldBindJSON(&product); err != nil {
+	var input models.Product
+
+	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	//   สร้างรหัสสินค้า product_code (Auto Generate Code)
-
+	//   สร้างรหัสสินค้า product_code
 	var lastProduct models.Product
 	var newCode string
 
-	// ค้นหาสินค้า "ตัวล่าสุด" ของร้านนี้
-	result := database.DB.Where("shop_id = ?", product.ShopID).Order("product_id desc").First(&lastProduct)
+	// ค้นหาสินค้า ล่าสุด ของร้านนี้
+	result := database.DB.Where("shop_id = ?", input.ShopID).Order("product_id desc").First(&lastProduct)
 
 	if result.RowsAffected == 0 {
-		// กรณี A: ร้านนี้ยังไม่เคยมีสินค้าเลย -> เริ่มต้นที่ 001
-		// รูปแบบ: ps + shop_id + _001 (เช่น ps1_001)
-		newCode = fmt.Sprintf("ps%d_001", product.ShopID)
+		// fmt.Sprintf คือ ผสมข้อความ String Formatting
+		newCode = fmt.Sprintf("ps%d_001", input.ShopID)
 	} else {
-		// กรณี B: มีสินค้าอยู่แล้ว (เช่น ps1_005) -> ต้องแกะเลข 5 ออกมาบวก 1
-
 		// แยก String ด้วยเครื่องหมาย "_" (จะได้ ["ps1", "005"])
+
 		parts := strings.Split(lastProduct.ProductCode, "_")
 
 		if len(parts) == 2 {
-			// เอาส่วนที่เป็นตัวเลข (parts[1]) มาแปลงเป็น int
+			// แปลงจาก string เป็น int และ ผลลัพธ์ จาก "005" กลายเป็นเลข 5
+			// Atoi ย่อมาจาก ASCII to Integer
 			currentNum, err := strconv.Atoi(parts[1])
+
 			if err == nil {
-				// ถ้าแปลงสำเร็จ ให้บวก 1
 				nextNum := currentNum + 1
-				// ประกอบร่างใหม่ (%03d คือเติม 0 ข้างหน้าให้ครบ 3 หลัก เช่น 1 -> 001)
-				newCode = fmt.Sprintf("ps%d_%03d", product.ShopID, nextNum)
+				// แล้วมาผสมข้อความใหม่
+				newCode = fmt.Sprintf("ps%d_%03d", input.ShopID, nextNum)
 			}
 		}
 	}
 
-	// กันเหนียว: ถ้าเกิด error ในการแกะเลข หรือ format เดิมผิดเพี้ยน ให้ตั้งเป็น 001 ใหม่ไปเลย
+	// กันพลาด ถ้าเกิด error ในการถอดเลข หรือ format เดิมผิดเพี้ยน ให้ตั้งเป็น 001 ใหม่ไปเลย
 	if newCode == "" {
-		newCode = fmt.Sprintf("ps%d_%s", product.ShopID, "001")
+		newCode = fmt.Sprintf("ps%d_%s", input.ShopID, "001")
 	}
 
-	// ยัดรหัสที่คำนวณเสร็จแล้ว ใส่เข้าไปในตัวแปร product
-	product.ProductCode = newCode
-	// =========================================================
+	input.ProductCode = newCode
 
-	// 4. Insert into Database
-	// ใช้ตัวแปร product (ที่มี ProductCode แล้ว) บันทึกได้เลย
-	if err := database.DB.Create(&product).Error; err != nil {
+	// Insert into Database
+	if err := database.DB.Create(&input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกสินค้าได้: " + err.Error()})
 		return
 	}
 
-	// 5. Return Success
+	//  Return Success
 	c.JSON(http.StatusOK, gin.H{
 		"message": "บันทึกสินค้าสำเร็จ",
-		"data":    product,
+		"data":    input,
 	})
 }
