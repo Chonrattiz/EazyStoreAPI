@@ -222,6 +222,37 @@ paths:
       summary: เพิ่มร้านค้า
       tags:
       - Shop
+  /api/getShop:
+    get:
+      consumes:
+      - application/json
+      description: ดูร้านค้าของ User ที่ Login อยู่ (ดึง ID จาก Token)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Shop'
+            type: array
+        "404":
+          description: Shop not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: ดูร้านค้า
+      tags:
+      - Shop
 securityDefinitions:
   BearerAuth:
     in: header
