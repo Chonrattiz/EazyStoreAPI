@@ -42,6 +42,7 @@ func SetupRouter() *gin.Engine {
 		protected.POST("/createShop", shopController.CreateShop)
 
 		protected.POST("/createProduct", productController.CreateProduct)
+		protected.GET("/categories", productController.GetCategories)
 
 		// ทดสอบระบบ (Test Token)
 		protected.GET("/profile", func(c *gin.Context) {

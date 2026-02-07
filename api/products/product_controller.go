@@ -79,3 +79,18 @@ func CreateProduct(c *gin.Context) {
 		"data":    input,
 	})
 }
+
+
+
+// GetCategories ดึงรายการหมวดหมู่ทั้งหมดจากฐานข้อมูล
+func GetCategories(c *gin.Context) {
+    var categories []models.Category
+    
+    // ดึงข้อมูลทั้งหมดจากตาราง category
+    if err := database.DB.Order("category_id ASC").Find(&categories).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลหมวดหมู่ได้: " + err.Error()})
+        return
+    }
+
+    c.JSON(http.StatusOK, categories)
+}
