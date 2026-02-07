@@ -181,13 +181,14 @@ func Login(c *gin.Context) {
 
     // 3. ✨ ตรวจสอบว่าผู้ใช้งานยืนยันอีเมล (OTP) แล้วหรือยัง
     if !user.IsVerified {
-        c.JSON(http.StatusForbidden, gin.H{
-            "error":       "บัญชีนี้ยังไม่ได้ยืนยันตัวตน กรุณายืนยันรหัส OTP ในอีเมลของคุณ",
-            "is_verified": false, // ส่งสถานะไปให้ Frontend จัดการต่อ
-            "email":       user.Email,
-        })
-        return
-    }
+    c.JSON(http.StatusForbidden, gin.H{
+        "error":       "กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าสู่ระบบ",
+        "is_verified": false,
+        "email":       user.Email,    // ส่งเมลจริงจาก DB
+        "username":    user.Username, // ✨ ต้องส่ง Username จริงกลับไปด้วย!
+    })
+    return
+}
 
     // 4. ตรวจสอบรหัสผ่านโดยใช้ Bcrypt
     err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password))
