@@ -42,6 +42,7 @@ func SetupRouter() *gin.Engine {
 
 		protected.POST("/createProduct", productController.CreateProduct)
 		protected.GET("/categories", productController.GetCategories)
+		protected.GET("/products", productController.GetProductsByShop)
 
 
 	}
