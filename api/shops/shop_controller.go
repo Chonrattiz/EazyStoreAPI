@@ -100,7 +100,7 @@ func GetShopByUser(c *gin.Context) {
 func DeleteShop(c *gin.Context) {
 	shopID := c.Param("shop_id")
 
-	userID, exists := c.Get("userId")
+	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: ไม่พบข้อมูลผู้ใช้"})
 		return
@@ -145,7 +145,7 @@ func DeleteShop(c *gin.Context) {
 func UpdateShop(c *gin.Context) {
 	// 1. รับ ID และ UserID (เหมือนเดิม)
 	shopID := c.Param("shop_id")
-	userID, _ := c.Get("userId") // สมมติว่า middleware ผ่านแล้ว
+	userID, _ := c.Get("user_id")
 
 	// 2. รับข้อมูล (Partial Update)
 	var input models.UpdateShopInput
