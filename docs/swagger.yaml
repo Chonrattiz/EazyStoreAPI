@@ -110,6 +110,27 @@ definitions:
     - pin_code
     - user_id
     type: object
+  models.UpdateShopInput:
+    properties:
+      address:
+        example: 555 ถ.ลาดพร้าว
+        type: string
+      img_qrcode:
+        example: https://image.url/new_qrcode.jpg
+        type: string
+      img_shop:
+        example: https://image.url/new_shop.jpg
+        type: string
+      name:
+        example: ร้านจันทร์เพ็ญ (แก้ไข)
+        type: string
+      phone:
+        example: "0899998888"
+        type: string
+      pin_code:
+        example: "654321"
+        type: string
+    type: object
 host: localhost:8080
 info:
   contact: {}
@@ -222,6 +243,42 @@ paths:
       summary: เพิ่มร้านค้า
       tags:
       - Shop
+  /api/deleteShop/{shop_id}:
+    delete:
+      consumes:
+      - application/json
+      description: ลบร้านค้าของ User id และ Shop id ที่ส่งเข้ามา
+      parameters:
+      - description: Shop ID
+        in: path
+        name: shop_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Shop not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: ลบร้านค้า
+      tags:
+      - Shop
   /api/getShop:
     get:
       consumes:
@@ -251,6 +308,42 @@ paths:
       security:
       - BearerAuth: []
       summary: ดูร้านค้า
+      tags:
+      - Shop
+  /api/updateShop/{shop_id}:
+    put:
+      consumes:
+      - application/json
+      description: แก้ไขเฉพาะข้อมูลที่ส่งมา (Field ไหนไม่ส่งมา จะใช้ค่าเดิม)
+      parameters:
+      - description: Shop ID
+        in: path
+        name: shop_id
+        required: true
+        type: integer
+      - description: ข้อมูลที่ต้องการแก้
+        in: body
+        name: shop
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateShopInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: แก้ไขข้อมูลร้านค้า
       tags:
       - Shop
 securityDefinitions:

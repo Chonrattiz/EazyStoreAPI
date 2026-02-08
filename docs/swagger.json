@@ -174,6 +174,62 @@
                 }
             }
         },
+        "/api/deleteShop/{shop_id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "ลบร้านค้าของ User id และ Shop id ที่ส่งเข้ามา",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Shop"
+                ],
+                "summary": "ลบร้านค้า",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Shop ID",
+                        "name": "shop_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Shop not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/getShop": {
             "get": {
                 "security": [
@@ -213,6 +269,62 @@
                     },
                     "500": {
                         "description": "Internal Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/updateShop/{shop_id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "แก้ไขเฉพาะข้อมูลที่ส่งมา (Field ไหนไม่ส่งมา จะใช้ค่าเดิม)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Shop"
+                ],
+                "summary": "แก้ไขข้อมูลร้านค้า",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Shop ID",
+                        "name": "shop_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "ข้อมูลที่ต้องการแก้",
+                        "name": "shop",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.UpdateShopInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -369,6 +481,35 @@
                 "user_id": {
                     "type": "integer",
                     "example": 1
+                }
+            }
+        },
+        "models.UpdateShopInput": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "example": "555 ถ.ลาดพร้าว"
+                },
+                "img_qrcode": {
+                    "type": "string",
+                    "example": "https://image.url/new_qrcode.jpg"
+                },
+                "img_shop": {
+                    "type": "string",
+                    "example": "https://image.url/new_shop.jpg"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "ร้านจันทร์เพ็ญ (แก้ไข)"
+                },
+                "phone": {
+                    "type": "string",
+                    "example": "0899998888"
+                },
+                "pin_code": {
+                    "type": "string",
+                    "example": "654321"
                 }
             }
         }

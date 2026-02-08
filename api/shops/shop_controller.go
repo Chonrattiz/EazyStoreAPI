@@ -137,7 +137,7 @@ func DeleteShop(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Param        shop_id  path      int              true  "Shop ID"
-// @Param        shop     body      UpdateShopInput  true  "ข้อมูลที่ต้องการแก้"
+// @Param  		 shop  body  models.UpdateShopInput  true  "ข้อมูลที่ต้องการแก้"
 // @Security     BearerAuth
 // @Success      200      {object}  map[string]interface{}
 // @Failure      400      {object}  map[string]string "Bad Request"

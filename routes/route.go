@@ -14,9 +14,8 @@ import (
 func SetupRouter() *gin.Engine {
 	r := gin.Default()
 
-	// -----------------------------------------------------
-	// 🟢 โซน Public (ไม่ต้องใช้ Token)
-	// -----------------------------------------------------
+
+	// โซน Public (ไม่ต้องใช้ Token)
 	auth := r.Group("/api/auth")
 	{
 		auth.POST("/register", authController.Register)
@@ -30,10 +29,8 @@ func SetupRouter() *gin.Engine {
 		auth.POST("/reset-password", resetController.UpdatePassword)
 	}
 
-	// -----------------------------------------------------
 	//  โซน Protected (ต้องมี Token เท่านั้นถึงจะเข้าได้)
-	// -----------------------------------------------------
-	// สร้างกลุ่ม api ใหม่ แล้วสั่ง Use(middleware.CheckAuth())
+
 	protected := r.Group("/api")
 	protected.Use(middleware.CheckAuth())
 	{
@@ -41,22 +38,12 @@ func SetupRouter() *gin.Engine {
 		protected.POST("/createShop", shopController.CreateShop)
 		protected.GET("/getShop", shopController.GetShopByUser)
 		protected.DELETE("/deleteShop/:shop_id", shopController.DeleteShop)
+		protected.PUT("/updateShop/:shop_id", shopController.UpdateShop)
 
 		protected.POST("/createProduct", productController.CreateProduct)
 		protected.GET("/categories", productController.GetCategories)
 
-		// ทดสอบระบบ (Test Token)
-		protected.GET("/profile", func(c *gin.Context) {
-			// ลองดึงค่าที่ Middleware แปะไว้ให้ออกมาดู
-			userId, _ := c.Get("user_id")
-			username, _ := c.Get("username")
 
-			c.JSON(200, gin.H{
-				"message":   "คุณเข้าสู่โซนปลอดภัยได้แล้ว!",
-				"your_id":   userId,
-				"your_name": username,
-			})
-		})
 	}
 
 	return r
