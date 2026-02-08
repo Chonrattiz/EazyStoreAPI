@@ -10,3 +10,12 @@ type Shop struct {
 	ImgShop   string `json:"img_shop" example:"https://image.url/homeshop.jpg"`
 	Pincode   string `json:"pin_code" gorm:"column:pin_code" binding:"required,len=6" example:"191047"`
 }
+
+type UpdateShopInput struct {
+	Name      *string `json:"name" example:"ร้านจันทร์เพ็ญ (แก้ไข)"`
+	Phone     *string `json:"phone" example:"0899998888"`
+	Address   *string `json:"address" example:"555 ถ.ลาดพร้าว"`
+	ImgQRCode *string `json:"img_qrcode" example:"https://image.url/new_qrcode.jpg"`
+	ImgShop   *string `json:"img_shop" example:"https://image.url/new_shop.jpg"`
+	PinCode   *string `json:"pin_code" example:"654321"`
+}
