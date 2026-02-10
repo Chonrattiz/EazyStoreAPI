@@ -14,7 +14,6 @@ import (
 func SetupRouter() *gin.Engine {
 	r := gin.Default()
 
-
 	// โซน Public (ไม่ต้องใช้ Token)
 	auth := r.Group("/api/auth")
 	{
@@ -43,7 +42,8 @@ func SetupRouter() *gin.Engine {
 		protected.POST("/createProduct", productController.CreateProduct)
 		protected.GET("/categories", productController.GetCategories)
 		protected.GET("/products", productController.GetProductsByShop)
-
+		protected.GET("/product/search", productController.GetProductBySearch)
+		protected.PUT("product/stock", productController.UpdateStock)
 
 	}
 

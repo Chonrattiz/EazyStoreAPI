@@ -131,6 +131,16 @@ definitions:
         example: "654321"
         type: string
     type: object
+  models.UpdateStockRequest:
+    properties:
+      product_id:
+        type: integer
+      stock:
+        type: integer
+    required:
+    - product_id
+    - stock
+    type: object
 host: localhost:8080
 info:
   contact: {}
@@ -310,6 +320,89 @@ paths:
       summary: ดูร้านค้า
       tags:
       - Shop
+  /api/product/search:
+    get:
+      consumes:
+      - application/json
+      description: ค้นหาสินค้าด้วย ID, Barcode, รหัสสินค้า หรือ ชื่อ
+      parameters:
+      - description: รหัสสินค้า (Product ID)
+        in: query
+        name: product_id
+        type: integer
+      - description: รหัสสินค้า (Product Code)
+        in: query
+        name: product_code
+        type: string
+      - description: บาร์โค้ด (Barcode)
+        in: query
+        name: barcode
+        type: string
+      - description: ชื่อสินค้า (Name)
+        in: query
+        name: name
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Product'
+        "400":
+          description: Error message
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Product not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: ค้นหาสินค้า (Search Product)
+      tags:
+      - Product
+  /api/product/stock:
+    put:
+      consumes:
+      - application/json
+      description: บันทึกยอดสต็อกสินค้าล่าสุด
+      parameters:
+      - description: ข้อมูลอัปเดตสต็อก
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateStockRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'message: success'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid input
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Update failed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: อัปเดตสต็อกสินค้า (Update Product Stock)
+      tags:
+      - Product
   /api/products:
     get:
       consumes:

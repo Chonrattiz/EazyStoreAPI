@@ -10,6 +10,7 @@ import (
 	"EazyStoreAPI/models"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // CreateProduct godoc
@@ -80,21 +81,18 @@ func CreateProduct(c *gin.Context) {
 	})
 }
 
-
-
 // GetCategories ดึงรายการหมวดหมู่ทั้งหมดจากฐานข้อมูล
 func GetCategories(c *gin.Context) {
-    var categories []models.Category
-    
-    // ดึงข้อมูลทั้งหมดจากตาราง category
-    if err := database.DB.Order("category_id ASC").Find(&categories).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลหมวดหมู่ได้: " + err.Error()})
-        return
-    }
+	var categories []models.Category
 
-    c.JSON(http.StatusOK, categories)
+	// ดึงข้อมูลทั้งหมดจากตาราง category
+	if err := database.DB.Order("category_id ASC").Find(&categories).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลหมวดหมู่ได้: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, categories)
 }
-
 
 // GetProductsByShop godoc
 // @Summary      ดึงรายการสินค้าทั้งหมดของร้านค้า
@@ -109,25 +107,129 @@ func GetCategories(c *gin.Context) {
 // @Failure      500  {object}  map[string]string "ไม่สามารถดึงข้อมูลสินค้าได้"
 // @Router       /api/products [get]
 func GetProductsByShop(c *gin.Context) {
-    // รับ shop_id จาก Query Parameter (เช่น /api/products?shop_id=1)
-    shopID := c.Query("shop_id")
-    
-    if shopID == "" {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ shop_id"})
-        return
-    }
+	// รับ shop_id จาก Query Parameter (เช่น /api/products?shop_id=1)
+	shopID := c.Query("shop_id")
 
-    var products []models.Product
-    
-    // ใช้ GORM ดึงข้อมูลทั้งหมดโดยกรองตาม shop_id
-    // SELECT * FROM products WHERE shop_id = ?
-    result := database.DB.Where("shop_id = ?", shopID).Order("product_id DESC").Find(&products)
+	if shopID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ shop_id"})
+		return
+	}
 
-    if result.Error != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลสินค้าได้: " + result.Error.Error()})
-        return
-    }
+	var products []models.Product
 
-    // ส่งข้อมูลกลับไปในรูปแบบ List
-    c.JSON(http.StatusOK, products)
+	// ใช้ GORM ดึงข้อมูลทั้งหมดโดยกรองตาม shop_id
+	// SELECT * FROM products WHERE shop_id = ?
+	result := database.DB.Where("shop_id = ?", shopID).Order("product_id DESC").Find(&products)
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลสินค้าได้: " + result.Error.Error()})
+		return
+	}
+
+	// ส่งข้อมูลกลับไปในรูปแบบ List
+	c.JSON(http.StatusOK, products)
+}
+
+// GetProductBySearch godoc
+// @Summary      ค้นหาสินค้า (Search Product)
+// @Description  ค้นหาสินค้าด้วย ID, Barcode, รหัสสินค้า หรือ ชื่อ
+// @Tags         Product
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        product_id    query    int     false  "รหัสสินค้า (Product ID)"
+// @Param        product_code  query    string  false  "รหัสสินค้า (Product Code)"
+// @Param        barcode       query    string  false  "บาร์โค้ด (Barcode)"
+// @Param        name          query    string  false  "ชื่อสินค้า (Name)"
+// @Success      200  {object}  models.Product
+// @Failure      400  {object}  map[string]string "Error message"
+// @Failure      404  {object}  map[string]string "Product not found"
+// @Router       /api/product/search [get]
+func GetProductBySearch(c *gin.Context) {
+	// 1. รับค่าจาก Query Param
+	productID := c.Query("product_id")
+	productCode := c.Query("product_code")
+	barcode := c.Query("barcode")
+	name := c.Query("name")
+
+	// 2. ตรวจสอบว่ามีการส่งค่ามาอย่างน้อย 1 อย่างไหม
+	if productID == "" && productCode == "" && barcode == "" && name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุคำค้นหา (id, code, barcode, หรือ name)"})
+		return
+	}
+
+	var product models.Product
+	query := database.DB
+
+	// 3. สร้าง Query ตามค่าที่ส่งมา (Priority: ID > Code > Barcode > Name)
+	// ใช้ First แทน Find เพราะเราต้องการ Object เดียว (หรือตัวแรกที่เจอ)
+	if productID != "" {
+		query = query.Where("product_id = ?", productID)
+	} else if productCode != "" {
+		query = query.Where("product_code = ?", productCode)
+	} else if barcode != "" {
+		query = query.Where("barcode = ?", barcode)
+	} else if name != "" {
+		// ค้นหาแบบบางส่วน (LIKE)
+		query = query.Where("name LIKE ?", "%"+name+"%")
+	}
+
+	// 4. สั่งค้นหา
+	result := query.First(&product)
+
+	// 5. เช็ค Error
+	if result.Error != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบสินค้า", "details": result.Error.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, product)
+}
+
+// UpdateStock godoc
+// @Summary      อัปเดตสต็อกสินค้า (Update Product Stock)
+// @Description  บันทึกยอดสต็อกสินค้าล่าสุด
+// @Tags         Product
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body models.UpdateStockRequest true "ข้อมูลอัปเดตสต็อก"
+// @Success      200  {object}  map[string]interface{} "message: success"
+// @Failure      400  {object}  map[string]string "Invalid input"
+// @Failure      500  {object}  map[string]string "Update failed"
+// @Router       /api/product/stock [put]
+func UpdateStock(c *gin.Context) {
+	var input models.UpdateStockRequest
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
+		return
+	}
+
+	//  อัปเดตแบบ "บวกเพิ่ม" (Atomic Update)
+	// ใช้ gorm.Expr("stock + ?", input.Stock) แทนการใส่ค่าตรงๆ
+	result := database.DB.Model(&models.Product{}).
+		Where("product_id = ?", input.ProductID).
+		Update("stock", gorm.Expr("stock + ?", input.Stock))
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "อัปเดตไม่สำเร็จ: " + result.Error.Error()})
+		return
+	}
+
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบสินค้ารหัสนี้"})
+		return
+	}
+
+	// ดึงค่าล่าสุดมาโชว์
+	var updatedProduct models.Product
+	database.DB.Select("stock").First(&updatedProduct, input.ProductID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":       "เพิ่มสต็อกสินค้าเรียบร้อย",
+		"product_id":    input.ProductID,
+		"added_amount":  input.Stock,          // จำนวนที่เติมเข้าไป
+		"current_stock": updatedProduct.Stock, // ยอดคงเหลือล่าสุดใน DB
+	})
 }
