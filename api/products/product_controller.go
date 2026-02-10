@@ -110,19 +110,10 @@ func GetProductsByShop(c *gin.Context) {
 	// รับ shop_id จาก Query Parameter (เช่น /api/products?shop_id=1)
 	shopID := c.Query("shop_id")
 
-    var products []models.Product
-    
-   // ✨ ใช้ Preload("Category") เพื่อจอยเอาข้อมูลชื่อหมวดหมู่มาแสดง
-    result := database.DB.Preload("Category").Where("shop_id = ?", shopID).Order("product_id DESC").Find(&products)
-    if result.Error != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลสินค้าได้: " + result.Error.Error()})
-        return
-    }
+	var products []models.Product
 
-	// ใช้ GORM ดึงข้อมูลทั้งหมดโดยกรองตาม shop_id
-	// SELECT * FROM products WHERE shop_id = ?
-	result := database.DB.Where("shop_id = ?", shopID).Order("product_id DESC").Find(&products)
-
+	// ✨ ใช้ Preload("Category") เพื่อจอยเอาข้อมูลชื่อหมวดหมู่มาแสดง
+	result := database.DB.Preload("Category").Where("shop_id = ?", shopID).Order("product_id DESC").Find(&products)
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลสินค้าได้: " + result.Error.Error()})
 		return
@@ -134,54 +125,35 @@ func GetProductsByShop(c *gin.Context) {
 
 // GetProductBySearch godoc
 // @Summary      ค้นหาสินค้า (Search Product)
-// @Description  ค้นหาสินค้าด้วย ID, Barcode, รหัสสินค้า หรือ ชื่อ
+// @Description  ค้นหาสินค้าด้วย Keyword (รองรับทั้ง Barcode, Product Code และชื่อสินค้า)
 // @Tags         Product
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        product_id    query    int     false  "รหัสสินค้า (Product ID)"
-// @Param        product_code  query    string  false  "รหัสสินค้า (Product Code)"
-// @Param        barcode       query    string  false  "บาร์โค้ด (Barcode)"
-// @Param        name          query    string  false  "ชื่อสินค้า (Name)"
+// @Param        keyword    query    string   true   "คำค้นหา (ระบุ Barcode, รหัส หรือ ชื่อ)"
 // @Success      200  {object}  models.Product
-// @Failure      400  {object}  map[string]string "Error message"
+// @Failure      400  {object}  map[string]string "Bad Request"
 // @Failure      404  {object}  map[string]string "Product not found"
 // @Router       /api/product/search [get]
 func GetProductBySearch(c *gin.Context) {
-	// 1. รับค่าจาก Query Param
-	productID := c.Query("product_id")
-	productCode := c.Query("product_code")
-	barcode := c.Query("barcode")
-	name := c.Query("name")
+	// รับค่า keyword ตัวเดียวพอ สำหรับการค้นหาแบบครอบจักรวาล
+	keyword := c.Query("keyword")
 
-	// 2. ตรวจสอบว่ามีการส่งค่ามาอย่างน้อย 1 อย่างไหม
-	if productID == "" && productCode == "" && barcode == "" && name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุคำค้นหา (id, code, barcode, หรือ name)"})
+	if keyword == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุคำค้นหา"})
 		return
 	}
 
 	var product models.Product
-	query := database.DB
 
-	// 3. สร้าง Query ตามค่าที่ส่งมา (Priority: ID > Code > Barcode > Name)
-	// ใช้ First แทน Find เพราะเราต้องการ Object เดียว (หรือตัวแรกที่เจอ)
-	if productID != "" {
-		query = query.Where("product_id = ?", productID)
-	} else if productCode != "" {
-		query = query.Where("product_code = ?", productCode)
-	} else if barcode != "" {
-		query = query.Where("barcode = ?", barcode)
-	} else if name != "" {
-		// ค้นหาแบบบางส่วน (LIKE)
-		query = query.Where("name LIKE ?", "%"+name+"%")
-	}
+	// ค้นหาใน product_code หรือ barcode หรือ name
+	// ใช้ Preload("Category") เพื่อดึงชื่อหมวดหมู่มาด้วย (ตามที่คุณต้องการใน Frontend)
+	result := database.DB.Preload("Category").
+		Where("product_code = ? OR barcode = ? OR name LIKE ?", keyword, keyword, "%"+keyword+"%").
+		First(&product)
 
-	// 4. สั่งค้นหา
-	result := query.First(&product)
-
-	// 5. เช็ค Error
 	if result.Error != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบสินค้า", "details": result.Error.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบสินค้า"})
 		return
 	}
 
