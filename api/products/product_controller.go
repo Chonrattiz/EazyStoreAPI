@@ -110,12 +110,14 @@ func GetProductsByShop(c *gin.Context) {
 	// รับ shop_id จาก Query Parameter (เช่น /api/products?shop_id=1)
 	shopID := c.Query("shop_id")
 
-	if shopID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ shop_id"})
-		return
-	}
-
-	var products []models.Product
+    var products []models.Product
+    
+   // ✨ ใช้ Preload("Category") เพื่อจอยเอาข้อมูลชื่อหมวดหมู่มาแสดง
+    result := database.DB.Preload("Category").Where("shop_id = ?", shopID).Order("product_id DESC").Find(&products)
+    if result.Error != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลสินค้าได้: " + result.Error.Error()})
+        return
+    }
 
 	// ใช้ GORM ดึงข้อมูลทั้งหมดโดยกรองตาม shop_id
 	// SELECT * FROM products WHERE shop_id = ?

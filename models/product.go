@@ -6,7 +6,11 @@ type Product struct {
 	CategoryID  int    `json:"category_id" binding:"required" example:"2"`
 	ProductCode string `json:"product_code" gorm:"unique"`
 	Name        string `json:"name" binding:"required" example:"น้ำอัดลม โคล่า"`
-	//[เทคนิค] Barcode ควรเป็น Pointer (*string) เพื่อรองรับค่า NULL
+
+	// ✨ เพิ่มส่วนนี้เพื่อทำ Relationship กับตาราง Category
+	// gorm:"foreignKey:CategoryID" บอกให้ใช้ฟิลด์ CategoryID เป็นตัวเชื่อม
+	Category Category `json:"category" gorm:"foreignKey:CategoryID;references:CategoryID"`
+
 	Barcode    *string `json:"barcode" example:"885123456789"`
 	ImgProduct string  `json:"img_product" binding:"required" example:"https://image.url/cola.jpg"`
 	SellPrice  float64 `json:"sell_price" binding:"required,gt=0" example:"15.00"`
