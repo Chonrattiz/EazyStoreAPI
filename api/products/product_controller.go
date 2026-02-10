@@ -119,10 +119,8 @@ func GetProductsByShop(c *gin.Context) {
 
     var products []models.Product
     
-    // ใช้ GORM ดึงข้อมูลทั้งหมดโดยกรองตาม shop_id
-    // SELECT * FROM products WHERE shop_id = ?
-    result := database.DB.Where("shop_id = ?", shopID).Order("product_id DESC").Find(&products)
-
+   // ✨ ใช้ Preload("Category") เพื่อจอยเอาข้อมูลชื่อหมวดหมู่มาแสดง
+    result := database.DB.Preload("Category").Where("shop_id = ?", shopID).Order("product_id DESC").Find(&products)
     if result.Error != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลสินค้าได้: " + result.Error.Error()})
         return
