@@ -95,7 +95,19 @@ func GetCategories(c *gin.Context) {
     c.JSON(http.StatusOK, categories)
 }
 
-// GetProductsByShop ดึงรายการสินค้าทั้งหมดของร้านค้าเพื่อเช็คสต็อก
+
+// GetProductsByShop godoc
+// @Summary      ดึงรายการสินค้าทั้งหมดของร้านค้า
+// @Description  ดึงข้อมูลสินค้าทั้งหมดที่ผูกกับ shop_id โดยเรียงจากใหม่ไปเก่า
+// @Tags         Product
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        shop_id   query     int  true  "รหัสร้านค้า (Shop ID)"
+// @Success      200  {array}   models.Product
+// @Failure      400  {object}  map[string]string "กรุณาระบุ shop_id"
+// @Failure      500  {object}  map[string]string "ไม่สามารถดึงข้อมูลสินค้าได้"
+// @Router       /api/products [get]
 func GetProductsByShop(c *gin.Context) {
     // รับ shop_id จาก Query Parameter (เช่น /api/products?shop_id=1)
     shopID := c.Query("shop_id")

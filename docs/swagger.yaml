@@ -310,6 +310,43 @@ paths:
       summary: ดูร้านค้า
       tags:
       - Shop
+  /api/products:
+    get:
+      consumes:
+      - application/json
+      description: ดึงข้อมูลสินค้าทั้งหมดที่ผูกกับ shop_id โดยเรียงจากใหม่ไปเก่า
+      parameters:
+      - description: รหัสร้านค้า (Shop ID)
+        in: query
+        name: shop_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Product'
+            type: array
+        "400":
+          description: กรุณาระบุ shop_id
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: ไม่สามารถดึงข้อมูลสินค้าได้
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: ดึงรายการสินค้าทั้งหมดของร้านค้า
+      tags:
+      - Product
   /api/updateShop/{shop_id}:
     put:
       consumes:
