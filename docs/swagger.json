@@ -467,6 +467,53 @@
                 }
             }
         },
+        "/api/products/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "อัปเดตข้อมูล และบันทึกประวัติราคา (Manual Log) ทุกครั้งที่มีการส่งค่าราคามา",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Product"
+                ],
+                "summary": "แก้ไขข้อมูลสินค้า (Partial Update)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Product ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "ข้อมูลสินค้า",
+                        "name": "product",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Product"
+                        }
+                    }
+                }
+            }
+        },
         "/api/updateShop/{shop_id}": {
             "put": {
                 "security": [
@@ -525,6 +572,17 @@
         }
     },
     "definitions": {
+        "models.Category": {
+            "type": "object",
+            "properties": {
+                "category_id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "models.LoginInput": {
             "type": "object",
             "required": [
@@ -554,9 +612,16 @@
             ],
             "properties": {
                 "barcode": {
-                    "description": "[เทคนิค] Barcode ควรเป็น Pointer (*string) เพื่อรองรับค่า NULL",
                     "type": "string",
                     "example": "885123456789"
+                },
+                "category": {
+                    "description": "✨ เพิ่มส่วนนี้เพื่อทำ Relationship กับตาราง Category\ngorm:\"foreignKey:CategoryID\" บอกให้ใช้ฟิลด์ CategoryID เป็นตัวเชื่อม",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Category"
+                        }
+                    ]
                 },
                 "category_id": {
                     "type": "integer",

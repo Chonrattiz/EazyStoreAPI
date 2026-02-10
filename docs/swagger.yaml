@@ -1,5 +1,12 @@
 basePath: /
 definitions:
+  models.Category:
+    properties:
+      category_id:
+        type: integer
+      name:
+        type: string
+    type: object
   models.LoginInput:
     properties:
       password:
@@ -15,9 +22,14 @@ definitions:
   models.Product:
     properties:
       barcode:
-        description: '[เทคนิค] Barcode ควรเป็น Pointer (*string) เพื่อรองรับค่า NULL'
         example: "885123456789"
         type: string
+      category:
+        allOf:
+        - $ref: '#/definitions/models.Category'
+        description: |-
+          ✨ เพิ่มส่วนนี้เพื่อทำ Relationship กับตาราง Category
+          gorm:"foreignKey:CategoryID" บอกให้ใช้ฟิลด์ CategoryID เป็นตัวเชื่อม
       category_id:
         example: 2
         type: integer
@@ -438,6 +450,36 @@ paths:
       security:
       - BearerAuth: []
       summary: ดึงรายการสินค้าทั้งหมดของร้านค้า
+      tags:
+      - Product
+  /api/products/{id}:
+    put:
+      consumes:
+      - application/json
+      description: อัปเดตข้อมูล และบันทึกประวัติราคา (Manual Log) ทุกครั้งที่มีการส่งค่าราคามา
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: ข้อมูลสินค้า
+        in: body
+        name: product
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Product'
+      security:
+      - BearerAuth: []
+      summary: แก้ไขข้อมูลสินค้า (Partial Update)
       tags:
       - Product
   /api/updateShop/{shop_id}:

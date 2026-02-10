@@ -119,14 +119,7 @@ func GetProductsByShop(c *gin.Context) {
         return
     }
 
-	// ใช้ GORM ดึงข้อมูลทั้งหมดโดยกรองตาม shop_id
-	// SELECT * FROM products WHERE shop_id = ?
-	result := database.DB.Where("shop_id = ?", shopID).Order("product_id DESC").Find(&products)
-
-	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลสินค้าได้: " + result.Error.Error()})
-		return
-	}
+	
 
 	// ส่งข้อมูลกลับไปในรูปแบบ List
 	c.JSON(http.StatusOK, products)
@@ -234,4 +227,110 @@ func UpdateStock(c *gin.Context) {
 		"added_amount":  input.Stock,          // จำนวนที่เติมเข้าไป
 		"current_stock": updatedProduct.Stock, // ยอดคงเหลือล่าสุดใน DB
 	})
+}
+
+
+// UpdateProduct godoc
+// @Summary      แก้ไขข้อมูลสินค้า (Partial Update)
+// @Description  อัปเดตเฉพาะฟิลด์ที่ส่งมา และบันทึกประวัติราคาอัตโนมัติ (Manual Log)
+// @Tags         Product
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id       path      int             true  "Product ID"
+// @Param        product  body      map[string]interface{}  true  "ข้อมูลสินค้า (ส่งเฉพาะตัวที่แก้)"
+// @Success      200      {object}  models.Product
+// @Router       /api/products/{id} [put]
+func UpdateProduct(c *gin.Context) {
+    // 1. รับ ID จาก URL
+    productID := c.Param("id")
+
+    // 2. ค้นหาสินค้าเดิมก่อน (จำเป็นต้องมีค่าเดิมเพื่อเทียบราคาเก่า)
+    var product models.Product
+    if err := database.DB.First(&product, productID).Error; err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบสินค้ารหัสนี้"})
+        return
+    }
+
+    // 3. รับข้อมูลเป็น Map (เพื่อดูว่าเขาส่งฟิลด์ไหนมาบ้าง)
+    // การใช้ Map ช่วยให้รู้ว่า User ส่ง key ไหนมา ถ้าไม่ส่ง key ไหนมา map จะไม่มีค่านั้น
+    var inputMap map[string]interface{}
+    if err := c.ShouldBindJSON(&inputMap); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง: " + err.Error()})
+        return
+    }
+
+    // 4. กรองข้อมูล (White-list)
+    updateData := make(map[string]interface{})
+    allowedFields := []string{
+        "name", "category_id", "barcode", "img_product",
+        "sell_price", "cost_price", "unit", "status",
+        // ❌ ไม่ใส่ "stock" ในนี้ เพื่อป้องกันการแก้ไขสต็อกผ่านหน้านี้
+    }
+
+    for _, field := range allowedFields {
+        if val, exists := inputMap[field]; exists {
+            updateData[field] = val
+        }
+    }
+
+    if len(updateData) == 0 {
+        c.JSON(http.StatusOK, gin.H{"message": "ไม่มีข้อมูลเปลี่ยนแปลง", "data": product})
+        return
+    }
+
+    // ---------------------------------------------------------
+    // ✨ ส่วนที่เพิ่ม: Manual Trigger (เขียน Logic เก็บ Log ด้วย Go)
+    // เพราะ Database ไม่อนุญาตให้สร้าง Trigger เราเลยทำเองตรงนี้เลย
+    // ---------------------------------------------------------
+    
+    // 1. เช็คราคาขาย (Sell Price)
+    if val, ok := updateData["sell_price"]; ok {
+        // แปลงค่าเป็น float64 เพื่อเปรียบเทียบ
+        newPrice, _ := val.(float64)
+        oldPrice := product.SellPrice
+
+        if newPrice != oldPrice {
+            // บันทึกลงตาราง sell_price_logs
+            go database.DB.Exec(`
+                INSERT INTO sell_price_logs (product_id, sell_price_old, sell_price_new) 
+                VALUES (?, ?, ?)`, 
+                product.ProductID, oldPrice, newPrice,
+            )
+        }
+    }
+
+    // 2. เช็คราคาต้นทุน (Cost Price)
+    if val, ok := updateData["cost_price"]; ok {
+        newCost, _ := val.(float64)
+        oldCost := product.CostPrice
+
+        if newCost != oldCost {
+            // บันทึกลงตาราง cost_price_logs
+            go database.DB.Exec(`
+                INSERT INTO cost_price_logs (product_id, cost_price_old, cost_price_new) 
+                VALUES (?, ?, ?)`, 
+                product.ProductID, oldCost, newCost,
+            )
+        }
+    }
+    // ---------------------------------------------------------
+
+    // 5. สั่งอัปเดตลงฐานข้อมูล
+    // GORM จะอัปเดตเฉพาะคอลัมน์ที่มีใน map updateData เท่านั้น
+    // คอลัมน์ไหนไม่อยู่ใน map จะคงค่าเดิมไว้ (Partial Update สมบูรณ์แบบ)
+    if err := database.DB.Model(&product).Updates(updateData).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "แก้ไขข้อมูลไม่สำเร็จ: " + err.Error()})
+        return
+    }
+
+    // 6. ดึงข้อมูลล่าสุดมาแสดงผล (พร้อม Join Category เพื่อความสวยงาม)
+    // ต้องดึงใหม่เพราะค่าในตัวแปร product เก่ายังไม่อัปเดต
+    var updatedProduct models.Product
+    database.DB.Preload("Category").First(&updatedProduct, productID)
+
+    c.JSON(http.StatusOK, gin.H{
+        "message": "แก้ไขข้อมูลสำเร็จ",
+        "data":    updatedProduct, // ส่งข้อมูลที่มีชื่อหมวดหมู่กลับไป
+    })
 }
