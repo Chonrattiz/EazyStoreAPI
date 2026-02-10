@@ -336,23 +336,12 @@ paths:
     get:
       consumes:
       - application/json
-      description: ค้นหาสินค้าด้วย ID, Barcode, รหัสสินค้า หรือ ชื่อ
+      description: ค้นหาสินค้าด้วย Keyword (รองรับทั้ง Barcode, Product Code และชื่อสินค้า)
       parameters:
-      - description: รหัสสินค้า (Product ID)
+      - description: คำค้นหา (ระบุ Barcode, รหัส หรือ ชื่อ)
         in: query
-        name: product_id
-        type: integer
-      - description: รหัสสินค้า (Product Code)
-        in: query
-        name: product_code
-        type: string
-      - description: บาร์โค้ด (Barcode)
-        in: query
-        name: barcode
-        type: string
-      - description: ชื่อสินค้า (Name)
-        in: query
-        name: name
+        name: keyword
+        required: true
         type: string
       produces:
       - application/json
@@ -362,7 +351,7 @@ paths:
           schema:
             $ref: '#/definitions/models.Product'
         "400":
-          description: Error message
+          description: Bad Request
           schema:
             additionalProperties:
               type: string

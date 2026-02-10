@@ -7,8 +7,6 @@ type Product struct {
 	ProductCode string `json:"product_code" gorm:"unique"`
 	Name        string `json:"name" binding:"required" example:"น้ำอัดลม โคล่า"`
 
-	// ✨ เพิ่มส่วนนี้เพื่อทำ Relationship กับตาราง Category
-	// gorm:"foreignKey:CategoryID" บอกให้ใช้ฟิลด์ CategoryID เป็นตัวเชื่อม
 	Category Category `json:"category" gorm:"foreignKey:CategoryID;references:CategoryID"`
 
 	Barcode    *string `json:"barcode" example:"885123456789"`

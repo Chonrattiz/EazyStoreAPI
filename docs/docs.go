@@ -292,7 +292,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "ค้นหาสินค้าด้วย ID, Barcode, รหัสสินค้า หรือ ชื่อ",
+                "description": "ค้นหาสินค้าด้วย Keyword (รองรับทั้ง Barcode, Product Code และชื่อสินค้า)",
                 "consumes": [
                     "application/json"
                 ],
@@ -305,28 +305,11 @@ const docTemplate = `{
                 "summary": "ค้นหาสินค้า (Search Product)",
                 "parameters": [
                     {
-                        "type": "integer",
-                        "description": "รหัสสินค้า (Product ID)",
-                        "name": "product_id",
-                        "in": "query"
-                    },
-                    {
                         "type": "string",
-                        "description": "รหัสสินค้า (Product Code)",
-                        "name": "product_code",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "บาร์โค้ด (Barcode)",
-                        "name": "barcode",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "ชื่อสินค้า (Name)",
-                        "name": "name",
-                        "in": "query"
+                        "description": "คำค้นหา (ระบุ Barcode, รหัส หรือ ชื่อ)",
+                        "name": "keyword",
+                        "in": "query",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -337,7 +320,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Error message",
+                        "description": "Bad Request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
