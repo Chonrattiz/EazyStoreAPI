@@ -437,6 +437,36 @@ paths:
       summary: ดึงรายการสินค้าทั้งหมดของร้านค้า
       tags:
       - Product
+  /api/products/{id}:
+    put:
+      consumes:
+      - application/json
+      description: อัปเดตข้อมูล และบันทึกประวัติราคา (Manual Log) ทุกครั้งที่มีการส่งค่าราคามา
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: ข้อมูลสินค้า
+        in: body
+        name: product
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Product'
+      security:
+      - BearerAuth: []
+      summary: แก้ไขข้อมูลสินค้า (Partial Update)
+      tags:
+      - Product
   /api/updateShop/{shop_id}:
     put:
       consumes:
