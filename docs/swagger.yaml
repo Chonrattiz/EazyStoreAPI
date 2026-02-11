@@ -25,11 +25,7 @@ definitions:
         example: "885123456789"
         type: string
       category:
-        allOf:
-        - $ref: '#/definitions/models.Category'
-        description: |-
-          ✨ เพิ่มส่วนนี้เพื่อทำ Relationship กับตาราง Category
-          gorm:"foreignKey:CategoryID" บอกให้ใช้ฟิลด์ CategoryID เป็นตัวเชื่อม
+        $ref: '#/definitions/models.Category'
       category_id:
         example: 2
         type: integer

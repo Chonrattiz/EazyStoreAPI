@@ -552,12 +552,7 @@
                     "example": "885123456789"
                 },
                 "category": {
-                    "description": "✨ เพิ่มส่วนนี้เพื่อทำ Relationship กับตาราง Category\ngorm:\"foreignKey:CategoryID\" บอกให้ใช้ฟิลด์ CategoryID เป็นตัวเชื่อม",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.Category"
-                        }
-                    ]
+                    "$ref": "#/definitions/models.Category"
                 },
                 "category_id": {
                     "type": "integer",
