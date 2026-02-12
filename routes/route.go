@@ -5,6 +5,8 @@ import (
 	authController "EazyStoreAPI/api/auth"
 	productController "EazyStoreAPI/api/products"
 	shopController "EazyStoreAPI/api/shops"
+	debtorController "EazyStoreAPI/api/debtor"
+
 
 	"EazyStoreAPI/middleware"
 
@@ -45,6 +47,9 @@ func SetupRouter() *gin.Engine {
 		protected.GET("/product/search", productController.GetProductBySearch)
 		protected.PUT("product/stock", productController.UpdateStock)
 		protected.PUT("/products/:id", productController.UpdateProduct)
+		protected.GET("/getNullBarcode", productController.GetNullBarcode)
+
+		protected.POST("/createDebtor", debtorController.CreateDebtor)
 
 	}
 

@@ -7,6 +7,29 @@ definitions:
       name:
         type: string
     type: object
+  models.Debtor:
+    properties:
+      address:
+        example: 123 ถ.สุขุมวิท แขวงคลองเตย เขตคลองเตย กทม 10110
+        type: string
+      credit_limit:
+        example: 2000
+        type: integer
+      current_debt:
+        example: 0
+        type: number
+      debtor_id:
+        type: integer
+      img_debtor:
+        example: https://image.url/debtor.jpg
+        type: string
+      name:
+        example: ป้าเพ็ญ
+        type: string
+      phone:
+        example: "0654891234"
+        type: string
+    type: object
   models.LoginInput:
     properties:
       password:
@@ -201,6 +224,36 @@ paths:
       summary: สมัครสมาชิก
       tags:
       - Auth
+  /api/createDebtor:
+    post:
+      consumes:
+      - application/json
+      description: สร้างลูกหนี้ใหม่ลงในฐานข้อมูล
+      parameters:
+      - description: ข้อมูลลูกหนี้
+        in: body
+        name: Debtor
+        required: true
+        schema:
+          $ref: '#/definitions/models.Debtor'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Debtor'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: เพิ่มลูกหนี้
+      tags:
+      - Debtor
   /api/createProduct:
     post:
       consumes:
@@ -297,6 +350,43 @@ paths:
       summary: ลบร้านค้า
       tags:
       - Shop
+  /api/getNullBarcode:
+    get:
+      consumes:
+      - application/json
+      description: ดึงรายการสินค้าที่ไม่มีบาร์โค้ดแยกตามร้านค้า
+      parameters:
+      - description: รหัสร้านค้า (Shop ID)
+        in: query
+        name: shop_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Product'
+            type: array
+        "404":
+          description: Product not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: ดูสินค้าไม่มีบาร์โค้ด
+      tags:
+      - Product
   /api/getShop:
     get:
       consumes:

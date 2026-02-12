@@ -84,6 +84,54 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/createDebtor": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "สร้างลูกหนี้ใหม่ลงในฐานข้อมูล",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Debtor"
+                ],
+                "summary": "เพิ่มลูกหนี้",
+                "parameters": [
+                    {
+                        "description": "ข้อมูลลูกหนี้",
+                        "name": "Debtor",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.Debtor"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Debtor"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/createProduct": {
             "post": {
                 "security": [
@@ -217,6 +265,64 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Shop not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/getNullBarcode": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "ดึงรายการสินค้าที่ไม่มีบาร์โค้ดแยกตามร้านค้า",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Product"
+                ],
+                "summary": "ดูสินค้าไม่มีบาร์โค้ด",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "รหัสร้านค้า (Shop ID)",
+                        "name": "shop_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Product"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Product not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -569,6 +675,38 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "models.Debtor": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "example": "123 ถ.สุขุมวิท แขวงคลองเตย เขตคลองเตย กทม 10110"
+                },
+                "credit_limit": {
+                    "type": "integer",
+                    "example": 2000
+                },
+                "current_debt": {
+                    "type": "number",
+                    "example": 0
+                },
+                "debtor_id": {
+                    "type": "integer"
+                },
+                "img_debtor": {
+                    "type": "string",
+                    "example": "https://image.url/debtor.jpg"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "ป้าเพ็ญ"
+                },
+                "phone": {
+                    "type": "string",
+                    "example": "0654891234"
                 }
             }
         },
