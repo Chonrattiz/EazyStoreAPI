@@ -441,14 +441,15 @@ paths:
     put:
       consumes:
       - application/json
-      description: อัปเดตข้อมูล และบันทึกประวัติราคา (Manual Log) ทุกครั้งที่มีการส่งค่าราคามา
+      description: อัปเดตเฉพาะฟิลด์ที่ส่งมา และบันทึกประวัติราคาอัตโนมัติ (Manual
+        Log)
       parameters:
       - description: Product ID
         in: path
         name: id
         required: true
         type: integer
-      - description: ข้อมูลสินค้า
+      - description: ข้อมูลสินค้า (ส่งเฉพาะตัวที่แก้)
         in: body
         name: product
         required: true

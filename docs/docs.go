@@ -463,7 +463,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "อัปเดตข้อมูล และบันทึกประวัติราคา (Manual Log) ทุกครั้งที่มีการส่งค่าราคามา",
+                "description": "อัปเดตเฉพาะฟิลด์ที่ส่งมา และบันทึกประวัติราคาอัตโนมัติ (Manual Log)",
                 "consumes": [
                     "application/json"
                 ],
@@ -483,7 +483,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "ข้อมูลสินค้า",
+                        "description": "ข้อมูลสินค้า (ส่งเฉพาะตัวที่แก้)",
                         "name": "product",
                         "in": "body",
                         "required": true,
