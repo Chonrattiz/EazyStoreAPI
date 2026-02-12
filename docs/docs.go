@@ -309,6 +309,12 @@ const docTemplate = `{
                         "name": "shop_id",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "รหัสหมวดหมู่สินค้า (Category ID)",
+                        "name": "category_id",
+                        "in": "query"
                     }
                 ],
                 "responses": {

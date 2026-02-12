@@ -321,12 +321,14 @@ func UpdateProduct(c *gin.Context) {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        shop_id   query     int    true  "รหัสร้านค้า (Shop ID)"
+// @Param        category_id  query    int     false "รหัสหมวดหมู่สินค้า (Category ID)"
 // @Success      200  {array}   models.Product
 // @Failure      404  {object}  map[string]string "Product not found"
 // @Failure      500  {object}  map[string]string "Internal Error"
 // @Router       /api/getNullBarcode [get]
 func GetNullBarcode(c *gin.Context) {
 	shopID := c.Query("shop_id")
+	categoryID := c.Query("category_id")
 
 	if shopID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ shop_id"})
@@ -334,11 +336,14 @@ func GetNullBarcode(c *gin.Context) {
 	}
 
 	var products []models.Product
+	query := database.DB.Where("shop_id = ? AND barcode IS NULL", shopID)
 
-	// 2. เพิ่มเงื่อนไข shop_id เข้าไปใน Query
-	err := database.DB.Where("shop_id = ? AND barcode IS NULL", shopID).
-		Order("category_id ASC").
-		Find(&products).Error
+	// ถ้ามีการส่ง category_id มา ให้เพิ่มเงื่อนไขการค้นหา
+	if categoryID != "" {
+		query = query.Where("category_id = ?", categoryID)
+	}
+
+	err := query.Order("category_id ASC").Find(&products).Error
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ดึงข้อมูลล้มเหลว: " + err.Error()})
