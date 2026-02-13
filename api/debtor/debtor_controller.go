@@ -85,3 +85,40 @@ func GetDebtorBySearch(c *gin.Context) {
 
 	c.JSON(http.StatusOK, debtors)
 }
+
+
+// GetDebtorByAll godoc
+// @Summary      ดึงข้อมูลลูกหนี้
+// @Description  ดึงข้อมูลลูกหนี้ทั้งหมด ของ shopid นั้น
+// @Tags         Debtor
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        shop_id   query    int     true  "รหัสร้านค้า (Shop ID)"
+// @Success      200  {array}  models.Debtor
+// @Failure      400  {object}  map[string]string "ระบุพารามิเตอร์ไม่ครบ"
+// @Failure      404  {object}  map[string]string "ไม่พบข้อมูลลูกหนี้"
+// @Router       /api/debtor [get]
+func GetDebtorByAll (c *gin.Context) {
+	shopID := c.Query("shop_id")
+
+	if  shopID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ shop_id"})
+		return
+	}
+
+	var debtors []models.Debtor
+
+	result := database.DB.Where("shop_id = ?", shopID).Find(&debtors)
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในการดึงข้อมูล"})
+		return
+	}
+	if len(debtors) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลลูกหนี้"})
+		return
+	}
+
+	c.JSON(http.StatusOK, debtors)
+}

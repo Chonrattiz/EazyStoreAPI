@@ -50,7 +50,7 @@ func SetupRouter() *gin.Engine {
 
 		protected.POST("/createDebtor", debtorController.CreateDebtor)
 		protected.GET("/debtor/search", debtorController.GetDebtorBySearch)
-
+		protected.GET("/debtor", debtorController.GetDebtorByAll)
 	}
 
 	return r
