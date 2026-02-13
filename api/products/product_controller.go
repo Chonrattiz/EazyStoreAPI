@@ -125,39 +125,43 @@ func GetProductsByShop(c *gin.Context) {
 
 // GetProductBySearch godoc
 // @Summary      ค้นหาสินค้า (Search Product)
-// @Description  ค้นหาสินค้าด้วย Keyword (รองรับทั้ง Barcode, Product Code และชื่อสินค้า)
+// @Description  ค้นหาสินค้าด้วย Keyword เฉพาะในร้านที่ระบุ (ป้องกันการเจอของร้านอื่น)
 // @Tags         Product
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        keyword    query    string   true   "คำค้นหา (ระบุ Barcode, รหัส หรือ ชื่อ)"
+// @Param        keyword    query    string   true   "คำค้นหา (Barcode, รหัส, ชื่อ)"
+// @Param        shop_id    query    int      true   "รหัสร้านค้า (Shop ID)"
 // @Success      200  {object}  models.Product
 // @Failure      400  {object}  map[string]string "Bad Request"
 // @Failure      404  {object}  map[string]string "Product not found"
 // @Router       /api/product/search [get]
 func GetProductBySearch(c *gin.Context) {
-	// รับค่า keyword ตัวเดียวพอ สำหรับการค้นหาแบบครอบจักรวาล
-	keyword := c.Query("keyword")
+    // 1. รับค่า keyword และ shop_id
+    keyword := c.Query("keyword")
+    shopID := c.Query("shop_id") // ✅ เพิ่มการรับค่า shop_id
 
-	if keyword == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุคำค้นหา"})
-		return
-	}
+    // 2. ตรวจสอบว่าส่งมาครบไหม
+    if keyword == "" || shopID == "" {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุคำค้นหา และ รหัสร้านค้า"})
+        return
+    }
 
-	var product models.Product
+    var product models.Product
 
-	// ค้นหาใน product_code หรือ barcode หรือ name
-	// ใช้ Preload("Category") เพื่อดึงชื่อหมวดหมู่มาด้วย (ตามที่คุณต้องการใน Frontend)
-	result := database.DB.Preload("Category").
-		Where("product_code = ? OR barcode = ? OR name LIKE ?", keyword, keyword, "%"+keyword+"%").
-		First(&product)
+    // 3. ค้นหาโดยระบุ shop_id ด้วย
+    // SQL: SELECT * FROM products WHERE shop_id = ? AND (product_code = ? OR barcode = ? OR name LIKE ?) LIMIT 1
+    result := database.DB.Preload("Category").
+        Where("shop_id = ?", shopID). // ✅ ล็อคให้หาแค่ในร้านนี้เท่านั้น!
+        Where("product_code = ? OR barcode = ? OR name LIKE ?", keyword, keyword, "%"+keyword+"%").
+        First(&product)
 
-	if result.Error != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบสินค้า"})
-		return
-	}
+    if result.Error != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบสินค้าในร้านนี้"})
+        return
+    }
 
-	c.JSON(http.StatusOK, product)
+    c.JSON(http.StatusOK, product)
 }
 
 // UpdateStock godoc

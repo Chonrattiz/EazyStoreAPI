@@ -1,14 +1,13 @@
-// File: main.go
 package main
 
 import (
 	"EazyStoreAPI/database"
-	_ "EazyStoreAPI/docs" // import swagger docs
-	"EazyStoreAPI/routes" // <--- เพิ่ม import นี้
+	_ "EazyStoreAPI/docs"
+	"EazyStoreAPI/routes"
 	"log"
+	"os" // <--- อย่าลืมเพิ่ม import os
 
-	"github.com/joho/godotenv" // <--- เพิ่ม import นี้
-
+	"github.com/joho/godotenv"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -22,20 +21,28 @@ import (
 // @in header
 // @name Authorization
 func main() {
-	// 1. โหลดไฟล์ .env ก่อนเริ่มทำงาน
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file") // ถ้าหาไฟล์ไม่เจอให้แจ้งเตือน
-	}
-	// 1. เชื่อมต่อ Database
-	database.SetupDatabaseConnection()
+    // 1. โหลดไฟล์ .env (ถ้ามี)
+    err := godotenv.Load()
+    if err != nil {
+        // แก้: เปลี่ยนจาก Fatal เป็น Println เพราะบน Cloud ไม่มีไฟล์ .env ก็รันได้ (ใช้ Env Var ของระบบแทน)
+        log.Println("Note: .env file not found, using system environment variables instead.")
+    }
 
-	// 2. ตั้งค่า Router
-	r := routes.SetupRouter()
+    // 2. เชื่อมต่อ Database
+    database.SetupDatabaseConnection()
 
-	// 3. เพิ่ม Route สำหรับ Swagger
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+    // 3. ตั้งค่า Router
+    r := routes.SetupRouter()
 
-	// 4. รัน Server
-	r.Run(":8080")
+    // 4. เพิ่ม Route สำหรับ Swagger
+    r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+    // 5. รัน Server (แก้เรื่อง Port)
+    port := os.Getenv("PORT") // อ่าน Port จาก Render
+    if port == "" {
+        port = "8080" // ถ้าไม่มี (เช่นรันในเครื่องตัวเอง) ให้ใช้ 8080
+    }
+
+    // ใช้ 0.0.0.0 เพื่อให้เข้าถึงได้จากภายนอก Container
+    r.Run("0.0.0.0:" + port) 
 }
