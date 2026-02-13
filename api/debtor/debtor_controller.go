@@ -71,7 +71,7 @@ func GetDebtorBySearch(c *gin.Context) {
 	var debtors []models.Debtor
 
 	result := database.DB.Where("shop_id = ?", shopID).
-		Where(database.DB.Where("phone = ?", keyword).Or("name LIKE ?", "%"+keyword+"%")).
+		Where(database.DB.Where("phone LIKE ?", "%"+keyword+"%").Or("name LIKE ?", "%"+keyword+"%")).
 		Find(&debtors)
 
 	if result.Error != nil {
