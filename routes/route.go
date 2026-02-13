@@ -3,10 +3,9 @@ package routes
 import (
 	resetController "EazyStoreAPI/api/ResetPassword"
 	authController "EazyStoreAPI/api/auth"
+	debtorController "EazyStoreAPI/api/debtor"
 	productController "EazyStoreAPI/api/products"
 	shopController "EazyStoreAPI/api/shops"
-	debtorController "EazyStoreAPI/api/debtor"
-
 
 	"EazyStoreAPI/middleware"
 
@@ -50,6 +49,7 @@ func SetupRouter() *gin.Engine {
 		protected.GET("/getNullBarcode", productController.GetNullBarcode)
 
 		protected.POST("/createDebtor", debtorController.CreateDebtor)
+		protected.GET("/debtor/search", debtorController.GetDebtorBySearch)
 
 	}
 
