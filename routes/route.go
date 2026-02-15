@@ -5,6 +5,7 @@ import (
 	authController "EazyStoreAPI/api/auth"
 	debtorController "EazyStoreAPI/api/debtor"
 	productController "EazyStoreAPI/api/products"
+	saleController "EazyStoreAPI/api/sales"
 	shopController "EazyStoreAPI/api/shops"
 
 	"EazyStoreAPI/middleware"
@@ -51,6 +52,11 @@ func SetupRouter() *gin.Engine {
 		protected.POST("/createDebtor", debtorController.CreateDebtor)
 		protected.GET("/debtor/search", debtorController.GetDebtorBySearch)
 		protected.GET("/debtor", debtorController.GetDebtorByAll)
+
+
+		// --- Sale Routes (เพิ่มส่วนนี้เข้าไปครับ) ---
+        // ใช้ POST เพราะเป็นการสร้างรายการขายใหม่ลงใน Database
+        protected.POST("/createSale", saleController.CreateSale)
 	}
 
 	return r
