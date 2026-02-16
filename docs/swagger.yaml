@@ -61,7 +61,7 @@ definitions:
         type: string
       payment_method:
         description: วิธีจ่าย (เงินสด/เงินโอน)
-        example: เงินสด
+        example: จ่ายเงินสด
         type: string
       pin_code:
         description: รหัส PIN 6 หลัก

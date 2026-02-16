@@ -1020,7 +1020,7 @@ const docTemplate = `{
                 "payment_method": {
                     "description": "วิธีจ่าย (เงินสด/เงินโอน)",
                     "type": "string",
-                    "example": "เงินสด"
+                    "example": "จ่ายเงินสด"
                 },
                 "pin_code": {
                     "description": "รหัส PIN 6 หลัก",
