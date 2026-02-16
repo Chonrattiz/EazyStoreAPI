@@ -45,6 +45,40 @@ definitions:
     - password
     - username
     type: object
+  models.PayDebtRequest:
+    properties:
+      amount_paid:
+        description: ยอดเงินที่จ่าย
+        example: 45
+        type: number
+      debtor_id:
+        description: ไอดีลูกหนี้
+        example: 1
+        type: integer
+      pay_with:
+        description: ชื่อพนักงานที่รับเงิน
+        example: น้องปอ
+        type: string
+      payment_method:
+        description: วิธีจ่าย (เงินสด/เงินโอน)
+        example: เงินสด
+        type: string
+      pin_code:
+        description: รหัส PIN 6 หลัก
+        example: "191047"
+        type: string
+      shop_id:
+        description: ไอดีร้านค้า
+        example: 3
+        type: integer
+    required:
+    - amount_paid
+    - debtor_id
+    - pay_with
+    - payment_method
+    - pin_code
+    - shop_id
+    type: object
   models.Product:
     properties:
       barcode:
@@ -580,6 +614,56 @@ paths:
       summary: ดูร้านค้า
       tags:
       - Shop
+  /api/paymentDebt:
+    post:
+      consumes:
+      - application/json
+      description: API นี้ใช้สำหรับบันทึกการชำระหนี้ โดยจะทำการตรวจสอบ PIN Code 6
+        หลักของร้านค้าก่อนตัดยอดหนี้และบันทึกประวัติ
+      parameters:
+      - description: ข้อมูลการชำระหนี้และ PIN Code
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.PayDebtRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: บันทึกสำเร็จ (return JSON object)
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: ข้อมูลไม่ครบถ้วน (Bad Request)
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: รหัส PIN ไม่ถูกต้อง (Unauthorized)
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: ไม่พบร้านค้า หรือ ลูกหนี้ (Not Found)
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: ข้อผิดพลาดภายในเซิร์ฟเวอร์ (Internal Server Error)
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: ชำระหนี้ (พร้อมตรวจสอบ PIN ร้านค้า)
+      tags:
+      - Debtor
   /api/product/search:
     get:
       consumes:

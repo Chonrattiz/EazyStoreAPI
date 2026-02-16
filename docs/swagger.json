@@ -563,6 +563,82 @@
                 }
             }
         },
+        "/api/paymentDebt": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "API นี้ใช้สำหรับบันทึกการชำระหนี้ โดยจะทำการตรวจสอบ PIN Code 6 หลักของร้านค้าก่อนตัดยอดหนี้และบันทึกประวัติ",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Debtor"
+                ],
+                "summary": "ชำระหนี้ (พร้อมตรวจสอบ PIN ร้านค้า)",
+                "parameters": [
+                    {
+                        "description": "ข้อมูลการชำระหนี้และ PIN Code",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.PayDebtRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "บันทึกสำเร็จ (return JSON object)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "ข้อมูลไม่ครบถ้วน (Bad Request)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "รหัส PIN ไม่ถูกต้อง (Unauthorized)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "ไม่พบร้านค้า หรือ ลูกหนี้ (Not Found)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "ข้อผิดพลาดภายในเซิร์ฟเวอร์ (Internal Server Error)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/product/search": {
             "get": {
                 "security": [
@@ -906,6 +982,49 @@
                 "username": {
                     "description": "รับค่ามาเป็น \"username\" แต่เราจะเอาไปเช็คว่าเป็น Email หรือ เบอร์โทร ใน Controller",
                     "type": "string"
+                }
+            }
+        },
+        "models.PayDebtRequest": {
+            "type": "object",
+            "required": [
+                "amount_paid",
+                "debtor_id",
+                "pay_with",
+                "payment_method",
+                "pin_code",
+                "shop_id"
+            ],
+            "properties": {
+                "amount_paid": {
+                    "description": "ยอดเงินที่จ่าย",
+                    "type": "number",
+                    "example": 45
+                },
+                "debtor_id": {
+                    "description": "ไอดีลูกหนี้",
+                    "type": "integer",
+                    "example": 1
+                },
+                "pay_with": {
+                    "description": "ชื่อพนักงานที่รับเงิน",
+                    "type": "string",
+                    "example": "น้องปอ"
+                },
+                "payment_method": {
+                    "description": "วิธีจ่าย (เงินสด/เงินโอน)",
+                    "type": "string",
+                    "example": "เงินสด"
+                },
+                "pin_code": {
+                    "description": "รหัส PIN 6 หลัก",
+                    "type": "string",
+                    "example": "191047"
+                },
+                "shop_id": {
+                    "description": "ไอดีร้านค้า",
+                    "type": "integer",
+                    "example": 3
                 }
             }
         },
