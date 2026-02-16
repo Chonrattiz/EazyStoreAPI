@@ -53,10 +53,11 @@ func SetupRouter() *gin.Engine {
 		protected.GET("/debtor/search", debtorController.GetDebtorBySearch)
 		protected.GET("/debtor", debtorController.GetDebtorByAll)
 
-
 		// --- Sale Routes (เพิ่มส่วนนี้เข้าไปครับ) ---
-        // ใช้ POST เพราะเป็นการสร้างรายการขายใหม่ลงใน Database
-        protected.POST("/createSale", saleController.CreateSale)
+		// ใช้ POST เพราะเป็นการสร้างรายการขายใหม่ลงใน Database
+		protected.POST("/createSale", saleController.CreateSale)
+		protected.POST("/createCreditSale", saleController.CreateCreditSale)
+
 	}
 
 	return r

@@ -84,6 +84,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/createCreditSale": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "สร้างบิลขายและอัปเดตยอดหนี้คงค้างของลูกหนี้ในคราวเดียว",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Sale"
+                ],
+                "summary": "เพิ่มรายการขายค้างชำระ (เฉพาะ Credit เท่านั้น)",
+                "parameters": [
+                    {
+                        "description": "ข้อมูลรายการขายค้างชำระ",
+                        "name": "Sale",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.Sale"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/createDebtor": {
             "post": {
                 "security": [
@@ -218,6 +267,129 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/debtor": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "ดึงข้อมูลลูกหนี้ทั้งหมด ของ shopid นั้น",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Debtor"
+                ],
+                "summary": "ดึงข้อมูลลูกหนี้",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "รหัสร้านค้า (Shop ID)",
+                        "name": "shop_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Debtor"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ระบุพารามิเตอร์ไม่ครบ",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "ไม่พบข้อมูลลูกหนี้",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/debtor/search": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "ค้นหาลูกหนี้ด้วย Keyword (รองรับทั้ง ชื่อลูกหนี้, เบอร์โทร)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Debtor"
+                ],
+                "summary": "ค้นหาลูกหนี้",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "คำค้นหา (ระบุ  ชื่อ หรือ เบอร์โทร)",
+                        "name": "keyword",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "รหัสร้านค้า (Shop ID)",
+                        "name": "shop_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Debtor"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ระบุพารามิเตอร์ไม่ครบ",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "ไม่พบข้อมูลลูกหนี้",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -404,7 +576,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "ค้นหาสินค้าด้วย Keyword (รองรับทั้ง Barcode, Product Code และชื่อสินค้า)",
+                "description": "ค้นหาสินค้าด้วย Keyword เฉพาะในร้านที่ระบุ (ป้องกันการเจอของร้านอื่น)",
                 "consumes": [
                     "application/json"
                 ],
@@ -418,8 +590,15 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "คำค้นหา (ระบุ Barcode, รหัส หรือ ชื่อ)",
+                        "description": "คำค้นหา (Barcode, รหัส, ชื่อ)",
                         "name": "keyword",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "รหัสร้านค้า (Shop ID)",
+                        "name": "shop_id",
                         "in": "query",
                         "required": true
                     }
@@ -692,7 +871,7 @@ const docTemplate = `{
                     "example": "123 ถ.สุขุมวิท แขวงคลองเตย เขตคลองเตย กทม 10110"
                 },
                 "credit_limit": {
-                    "type": "integer",
+                    "type": "number",
                     "example": 2000
                 },
                 "current_debt": {
@@ -713,6 +892,10 @@ const docTemplate = `{
                 "phone": {
                     "type": "string",
                     "example": "0654891234"
+                },
+                "shop_id": {
+                    "type": "integer",
+                    "example": 1
                 }
             }
         },
@@ -819,6 +1002,73 @@ const docTemplate = `{
                 "username": {
                     "type": "string",
                     "example": "poder"
+                }
+            }
+        },
+        "models.Sale": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_buy": {
+                    "type": "string"
+                },
+                "created_time": {
+                    "type": "string"
+                },
+                "debtor_id": {
+                    "description": "ใช้ Pointer เพื่อให้เป็นค่า Null ได้",
+                    "type": "integer"
+                },
+                "net_price": {
+                    "type": "number"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "pay": {
+                    "type": "number"
+                },
+                "payment_method": {
+                    "description": "'cash', 'transfer', 'credit'",
+                    "type": "string"
+                },
+                "sale_id": {
+                    "type": "integer"
+                },
+                "sale_items": {
+                    "description": "สำหรับดึงข้อมูล SaleItems ออกมาพร้อมกับ Sale (ถ้าใช้ GORM)",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.SaleItem"
+                    }
+                },
+                "shop_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.SaleItem": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "price_per_unit": {
+                    "type": "number"
+                },
+                "product_id": {
+                    "type": "integer"
+                },
+                "sale_id": {
+                    "type": "integer"
+                },
+                "sale_items_id": {
+                    "type": "integer"
+                },
+                "total_price": {
+                    "type": "number"
                 }
             }
         },

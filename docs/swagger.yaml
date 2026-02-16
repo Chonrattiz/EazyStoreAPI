@@ -14,7 +14,7 @@ definitions:
         type: string
       credit_limit:
         example: 2000
-        type: integer
+        type: number
       current_debt:
         example: 0
         type: number
@@ -29,6 +29,9 @@ definitions:
       phone:
         example: "0654891234"
         type: string
+      shop_id:
+        example: 1
+        type: integer
     type: object
   models.LoginInput:
     properties:
@@ -108,6 +111,51 @@ definitions:
     - password
     - phone
     - username
+    type: object
+  models.Sale:
+    properties:
+      created_at:
+        type: string
+      created_buy:
+        type: string
+      created_time:
+        type: string
+      debtor_id:
+        description: ใช้ Pointer เพื่อให้เป็นค่า Null ได้
+        type: integer
+      net_price:
+        type: number
+      note:
+        type: string
+      pay:
+        type: number
+      payment_method:
+        description: '''cash'', ''transfer'', ''credit'''
+        type: string
+      sale_id:
+        type: integer
+      sale_items:
+        description: สำหรับดึงข้อมูล SaleItems ออกมาพร้อมกับ Sale (ถ้าใช้ GORM)
+        items:
+          $ref: '#/definitions/models.SaleItem'
+        type: array
+      shop_id:
+        type: integer
+    type: object
+  models.SaleItem:
+    properties:
+      amount:
+        type: integer
+      price_per_unit:
+        type: number
+      product_id:
+        type: integer
+      sale_id:
+        type: integer
+      sale_items_id:
+        type: integer
+      total_price:
+        type: number
     type: object
   models.Shop:
     properties:
@@ -224,6 +272,37 @@ paths:
       summary: สมัครสมาชิก
       tags:
       - Auth
+  /api/createCreditSale:
+    post:
+      consumes:
+      - application/json
+      description: สร้างบิลขายและอัปเดตยอดหนี้คงค้างของลูกหนี้ในคราวเดียว
+      parameters:
+      - description: ข้อมูลรายการขายค้างชำระ
+        in: body
+        name: Sale
+        required: true
+        schema:
+          $ref: '#/definitions/models.Sale'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: เพิ่มรายการขายค้างชำระ (เฉพาะ Credit เท่านั้น)
+      tags:
+      - Sale
   /api/createDebtor:
     post:
       consumes:
@@ -314,6 +393,85 @@ paths:
       summary: เพิ่มร้านค้า
       tags:
       - Shop
+  /api/debtor:
+    get:
+      consumes:
+      - application/json
+      description: ดึงข้อมูลลูกหนี้ทั้งหมด ของ shopid นั้น
+      parameters:
+      - description: รหัสร้านค้า (Shop ID)
+        in: query
+        name: shop_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Debtor'
+            type: array
+        "400":
+          description: ระบุพารามิเตอร์ไม่ครบ
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: ไม่พบข้อมูลลูกหนี้
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: ดึงข้อมูลลูกหนี้
+      tags:
+      - Debtor
+  /api/debtor/search:
+    get:
+      consumes:
+      - application/json
+      description: ค้นหาลูกหนี้ด้วย Keyword (รองรับทั้ง ชื่อลูกหนี้, เบอร์โทร)
+      parameters:
+      - description: คำค้นหา (ระบุ  ชื่อ หรือ เบอร์โทร)
+        in: query
+        name: keyword
+        required: true
+        type: string
+      - description: รหัสร้านค้า (Shop ID)
+        in: query
+        name: shop_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Debtor'
+            type: array
+        "400":
+          description: ระบุพารามิเตอร์ไม่ครบ
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: ไม่พบข้อมูลลูกหนี้
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: ค้นหาลูกหนี้
+      tags:
+      - Debtor
   /api/deleteShop/{shop_id}:
     delete:
       consumes:
@@ -426,13 +584,18 @@ paths:
     get:
       consumes:
       - application/json
-      description: ค้นหาสินค้าด้วย Keyword (รองรับทั้ง Barcode, Product Code และชื่อสินค้า)
+      description: ค้นหาสินค้าด้วย Keyword เฉพาะในร้านที่ระบุ (ป้องกันการเจอของร้านอื่น)
       parameters:
-      - description: คำค้นหา (ระบุ Barcode, รหัส หรือ ชื่อ)
+      - description: คำค้นหา (Barcode, รหัส, ชื่อ)
         in: query
         name: keyword
         required: true
         type: string
+      - description: รหัสร้านค้า (Shop ID)
+        in: query
+        name: shop_id
+        required: true
+        type: integer
       produces:
       - application/json
       responses:
