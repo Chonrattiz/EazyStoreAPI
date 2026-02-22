@@ -13,8 +13,8 @@ type Sale struct {
 	Pay           float64   `json:"pay" gorm:"type:decimal(10,2);not null"`
 	PaymentMethod string    `json:"payment_method" gorm:"type:varchar(20);not null"` // 'cash', 'transfer', 'credit'
 	Note          string    `json:"note" gorm:"type:text"`
-    CreatedAt      time.Time `json:"created_at" gorm:"type:date;autoCreateTime"`
-    CreatedTime    time.Time `json:"created_time" gorm:"type:time;autoCreateTime"`
+  CreatedAt     time.Time `json:"created_at" gorm:"type:date;autoCreateTime"`
+ CreatedTime   *string   `json:"created_time" gorm:"type:time"`
 	CreatedBuy    string    `json:"created_buy" gorm:"type:varchar(100);not null"`
 
 	// สำหรับดึงข้อมูล SaleItems ออกมาพร้อมกับ Sale (ถ้าใช้ GORM)

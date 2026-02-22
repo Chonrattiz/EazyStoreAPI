@@ -8,6 +8,9 @@ import (
 
 	"strings"
 
+	"fmt"
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -86,7 +89,6 @@ func GetDebtorBySearch(c *gin.Context) {
 	c.JSON(http.StatusOK, debtors)
 }
 
-
 // GetDebtorByAll godoc
 // @Summary      ดึงข้อมูลลูกหนี้
 // @Description  ดึงข้อมูลลูกหนี้ทั้งหมด ของ shopid นั้น
@@ -99,10 +101,10 @@ func GetDebtorBySearch(c *gin.Context) {
 // @Failure      400  {object}  map[string]string "ระบุพารามิเตอร์ไม่ครบ"
 // @Failure      404  {object}  map[string]string "ไม่พบข้อมูลลูกหนี้"
 // @Router       /api/debtor [get]
-func GetDebtorByAll (c *gin.Context) {
+func GetDebtorByAll(c *gin.Context) {
 	shopID := c.Query("shop_id")
 
-	if  shopID == "" {
+	if shopID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ shop_id"})
 		return
 	}
@@ -123,97 +125,137 @@ func GetDebtorByAll (c *gin.Context) {
 	c.JSON(http.StatusOK, debtors)
 }
 
-/*
-func GetDebtorHistory(db *sql.DB, debtorID int) (*DebtorDetailResponse, error) {
-	var resp DebtorDetailResponse
-	var creditLimit sql.NullFloat64 // จัดการกรณี credit_limit เป็น NULL
-
-	// ==========================================
-	// 1. ดึงข้อมูล Profile ลูกหนี้
-	// ==========================================
-	err := db.QueryRow(`
-		SELECT debtor_id, name, phone, address, current_debt, credit_limit 
-		FROM debtors 
-		WHERE debtor_id = ?`, debtorID).
-		Scan(&resp.DebtorID, &resp.Name, &resp.Phone, &resp.Address, &resp.CurrentDebt, &creditLimit)
-
+// GetDebtorHistory godoc
+// @Summary      ดึงประวัติการติดหนี้ของลูกหนี้
+// @Description  ดึงข้อมูลลูกหนี้ ยอดคงเหลือ และประวัติบิลที่ยังค้างชำระพร้อมรายการสินค้า
+// @Tags         Debtor
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "รหัสลูกหนี้ (Debtor ID)"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string "ข้อมูลไม่ถูกต้อง"
+// @Failure      404  {object}  map[string]string "ไม่พบข้อมูลลูกหนี้"
+// @Failure      500  {object}  map[string]string "เกิดข้อผิดพลาดในเซิร์ฟเวอร์"
+// @Router       /api/debtor/{id}/history [get]
+func GetDebtorHistory(c *gin.Context) {
+	// รับค่า ID ลูกหนี้จาก URL Path
+	idParam := c.Param("id")
+	debtorID, err := strconv.Atoi(idParam)
 	if err != nil {
-		return nil, err // ไม่เจอลูกหนี้ หรือ Database error
+		c.JSON(http.StatusBadRequest, gin.H{"error": "รหัสลูกหนี้ไม่ถูกต้อง"})
+		return
 	}
 
-	if creditLimit.Valid {
-		resp.CreditLimit = creditLimit.Float64
-		resp.CreditRemain = resp.CreditLimit - resp.CurrentDebt
+	// 1. ค้นหาข้อมูลลูกหนี้
+	var debtor models.Debtor
+	if err := database.DB.First(&debtor, debtorID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลลูกหนี้"})
+		return
 	}
 
-	// ==========================================
-	// 2. ดึงข้อมูลประวัติบิล (sales) และ สินค้า (sale_items + products)
-	// ==========================================
-	// ใช้ LEFT JOIN เพื่อให้ดึงบิลออกมาได้แม้จะไม่มี item (ป้องกัน data แหว่ง)
-	query := `
-		SELECT 
-			s.sale_id, s.created_at, s.net_price, s.pay,
-			si.amount, si.total_price,
-			p.name AS product_name
-		FROM sales s
-		JOIN sale_items si ON s.sale_id = si.sale_id
-		JOIN products p ON si.product_id = p.product_id
-		WHERE s.debtor_id = ? 
-		  AND s.net_price > s.pay  -- ดึงเฉพาะบิลที่ยอดซื้อมากกว่ายอดที่จ่าย (คือบิลที่ติดหนี้)
-		ORDER BY s.created_at DESC
-	`
-
-	rows, err := db.Query(query, debtorID)
-	if err != nil {
-		return nil, err
+	// 2. ค้นหาบิลทั้งหมดของลูกหนี้ที่ยังจ่ายไม่ครบ (ติดหนี้)
+	var sales []models.Sale
+	if err := database.DB.Preload("SaleItems").
+		Where("debtor_id = ? AND net_price > pay", debtorID).
+		Order("created_at desc, created_time desc").
+		Find(&sales).Error; err != nil {
+		fmt.Println("🚨 GORM ERROR:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในการดึงประวัติบิล"})
+		return
 	}
-	defer rows.Close()
 
-	// ใช้ Map เพื่อจัดกลุ่ม Item เข้าไปในแต่ละบิล
-	billsMap := make(map[int]*DebtBill)
-	var billOrder []int // เก็บลำดับ sale_id เพื่อรักษา order ตอนแปลงกลับเป็น Slice
-
-	for rows.Next() {
-		var (
-			saleID      int
-			createdAt   time.Time
-			netPrice    float64
-			pay         float64
-			amount      int
-			totalPrice  float64
-			productName string
-		)
-
-		err := rows.Scan(&saleID, &createdAt, &netPrice, &pay, &amount, &totalPrice, &productName)
-		if err != nil {
-			return nil, err
+	// 3. รวบรวม ProductID เพื่อไปดึงชื่อและหน่วยสินค้ามาแสดง
+	var productIDs []int
+	for _, sale := range sales {
+		for _, item := range sale.SaleItems {
+			productIDs = append(productIDs, item.ProductID)
 		}
+	}
 
-		// ถ้ายังไม่มีบิลนี้ใน map ให้สร้างใหม่
-		if _, exists := billsMap[saleID]; !exists {
-			billsMap[saleID] = &DebtBill{
-				SaleID:    saleID,
-				CreatedAt: createdAt.Format("02 Jan 2006 15:04"), // Format วันที่ตามต้องการ 
-				NetPrice:  netPrice,
-				Paid:      pay,
-				Remaining: netPrice - pay,
-				Items:     []DebtItem{},
+	// สร้าง Map เก็บข้อมูลสินค้าทั้งตัว (เพื่อให้ดึงได้ทั้ง ชื่อ และ หน่วย)
+	productMap := make(map[int]models.Product)
+	if len(productIDs) > 0 {
+		var products []models.Product
+		// สมมติว่าในฐานข้อมูลมีคอลัมน์ unit หรือใน Struct Product มีฟิลด์ Unit
+		database.DB.Select("product_id, name, unit").Where("product_id IN ?", productIDs).Find(&products)
+		for _, p := range products {
+			productMap[p.ProductID] = p
+		}
+	}
+
+	// 4. ประกอบร่างข้อมูลเป็น JSON (โดยใช้ Array ของ gin.H)
+	var histories []gin.H // เตรียม Array ไว้เก็บข้อมูลบิล
+	thaiMonths := []string{"", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."}
+
+	for _, sale := range sales {
+
+		// 1. จัดการวันที่ (แปลงเป็น พ.ศ. และเดือนไทย)
+		day := sale.CreatedAt.Day()
+		month := int(sale.CreatedAt.Month())
+		year := sale.CreatedAt.Year() + 543
+		// จัดฟอร์แมตวันที่ เช่น "16 ก.พ. 2569" (ถ้าเลขวันหลักเดียวจะมี 0 นำหน้า เช่น 05)
+		dateStr := fmt.Sprintf("%02d %s %d", day, thaiMonths[month], year)
+
+		// 2. จัดการเวลา (ดึงค่าออกจาก Pointer เพื่อแก้ปัญหา 0xc00)
+		timeStr := ""
+		if sale.CreatedTime != nil {
+			t := *sale.CreatedTime // ใส่เครื่องหมาย * เพื่อดึงค่าข้อความออกมาจาก Pointer
+			if len(t) >= 5 {
+				timeStr = t[:5] // เอาแค่ HH:mm
+			} else {
+				timeStr = t
 			}
-			billOrder = append(billOrder, saleID)
 		}
 
-		// นำสินค้าใส่เข้าไปในบิลนั้นๆ
-		billsMap[saleID].Items = append(billsMap[saleID].Items, DebtItem{
-			ProductName: productName,
-			Amount:      amount,
-			TotalPrice:  totalPrice,
+		// นำมารวมกัน จะได้เช่น "16 ก.พ. 2569 14:04"
+		dateTimeStr := fmt.Sprintf("%s %s", dateStr, timeStr)
+
+		var items []gin.H
+		for _, item := range sale.SaleItems {
+			name := "สินค้าไม่ทราบชื่อ"
+			unit := "ชิ้น" // ค่าเริ่มต้นเผื่อไม่มีระบุ
+
+			if p, ok := productMap[item.ProductID]; ok {
+				name = p.Name
+				if p.Unit != "" {
+					unit = p.Unit
+				}
+			}
+
+			items = append(items, gin.H{
+				"name":  name,
+				"qty":   item.Amount,
+				"price": item.TotalPrice,
+				"unit":  unit,
+			})
+		}
+
+		// ใส่ข้อมูลบิลลง Array
+		histories = append(histories, gin.H{
+			"order_id":         sale.SaleID,
+			"date":             dateTimeStr,
+			"total_amount":     sale.NetPrice,
+			"paid_amount":      sale.Pay,
+			"remaining_amount": sale.NetPrice - sale.Pay,
+			"items":            items,
 		})
 	}
 
-	// แปลง Map กลับเป็น Slice (Array) เพื่อใส่ใน Response
-	for _, id := range billOrder {
-		resp.Histories = append(resp.Histories, *billsMap[id])
+	// กันเหนียว กรณีไม่มีประวัติให้เป็น [] ว่างๆ จะได้ไม่เป็น null ตอนส่ง JSON
+	if histories == nil {
+		histories = []gin.H{}
 	}
 
-	return &resp, nil
-}*/
+	// 5. ส่งกลับ JSON ทันทีด้วยโครงสร้างที่ต้องการ
+	c.JSON(http.StatusOK, gin.H{
+		"debtor_id":     debtor.DebtorID,
+		"name":          debtor.Name,
+		"phone":         debtor.Phone,
+		"address":       debtor.Address,
+		"current_debt":  debtor.CurrentDebt,
+		"credit_limit":  debtor.CreditLimit,
+		"credit_remain": debtor.CreditLimit - debtor.CurrentDebt,
+		"histories":     histories,
+	})
+}

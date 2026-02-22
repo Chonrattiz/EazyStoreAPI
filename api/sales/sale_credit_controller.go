@@ -58,12 +58,24 @@ func CreateCreditSale(c *gin.Context) {
 			return fmt.Errorf("ยอดหนี้เกินวงเงินที่กำหนด (คงเหลือที่ค้างได้: %.2f บาท)", debtor.CreditLimit-debtor.CurrentDebt)
 		}
 
-		// ค. ตรวจสอบสินค้าทุกรายการว่าเป็นของร้านนี้จริงไหม (กันพลาด)
+		// ค. ตรวจสอบสินค้า เช็คสต๊อก และทำการตัดสต๊อก
 		for _, item := range input.SaleItems {
-			var productCount int64
-			tx.Table("products").Where("product_id = ? AND shop_id = ?", item.ProductID, input.ShopID).Count(&productCount)
-			if productCount == 0 {
-				return fmt.Errorf("สินค้ารหัส %d ไม่ใช่ของร้านคุณ", item.ProductID)
+			var product models.Product
+			// เช็คว่าสินค้ามีอยู่จริงและเป็นของร้านนี้
+			if err := tx.Where("product_id = ? AND shop_id = ?", item.ProductID, input.ShopID).First(&product).Error; err != nil {
+				return fmt.Errorf("ไม่พบสินค้ารหัส %d หรือไม่ใช่สินค้าของร้านคุณ", item.ProductID)
+			}
+
+			// เช็คว่าสต๊อกพอขายหรือไม่
+			if product.Stock < item.Amount {
+				return fmt.Errorf("สินค้า '%s' มีสต๊อกไม่พอ (คงเหลือ %d ชิ้น, ต้องการ %d ชิ้น)", product.Name, product.Stock, item.Amount)
+			}
+
+			// ทำการตัดสต๊อก
+			if err := tx.Model(&models.Product{}).
+				Where("product_id = ?", item.ProductID).
+				UpdateColumn("stock", gorm.Expr("stock - ?", item.Amount)).Error; err != nil {
+				return fmt.Errorf("ไม่สามารถตัดสต๊อกสินค้า '%s' ได้: %v", product.Name, err)
 			}
 		}
 

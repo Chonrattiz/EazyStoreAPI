@@ -464,6 +464,48 @@ paths:
       summary: ดึงข้อมูลลูกหนี้
       tags:
       - Debtor
+  /api/debtor/{id}/history:
+    get:
+      consumes:
+      - application/json
+      description: ดึงข้อมูลลูกหนี้ ยอดคงเหลือ และประวัติบิลที่ยังค้างชำระพร้อมรายการสินค้า
+      parameters:
+      - description: รหัสลูกหนี้ (Debtor ID)
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: ข้อมูลไม่ถูกต้อง
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: ไม่พบข้อมูลลูกหนี้
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: เกิดข้อผิดพลาดในเซิร์ฟเวอร์
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: ดึงประวัติการติดหนี้ของลูกหนี้
+      tags:
+      - Debtor
   /api/debtor/search:
     get:
       consumes:

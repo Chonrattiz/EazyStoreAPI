@@ -394,6 +394,71 @@
                 }
             }
         },
+        "/api/debtor/{id}/history": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "ดึงข้อมูลลูกหนี้ ยอดคงเหลือ และประวัติบิลที่ยังค้างชำระพร้อมรายการสินค้า",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Debtor"
+                ],
+                "summary": "ดึงประวัติการติดหนี้ของลูกหนี้",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "รหัสลูกหนี้ (Debtor ID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "ข้อมูลไม่ถูกต้อง",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "ไม่พบข้อมูลลูกหนี้",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "เกิดข้อผิดพลาดในเซิร์ฟเวอร์",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/deleteShop/{shop_id}": {
             "delete": {
                 "security": [

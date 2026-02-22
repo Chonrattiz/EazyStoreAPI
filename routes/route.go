@@ -54,12 +54,12 @@ func SetupRouter() *gin.Engine {
 		protected.POST("/createDebtor", debtorController.CreateDebtor)
 		protected.GET("/debtor/search", debtorController.GetDebtorBySearch)
 		protected.GET("/debtor", debtorController.GetDebtorByAll)
+		protected.GET("/debtor/:id/history", debtorController.GetDebtorHistory)
 
 		protected.POST("/createSale", saleController.CreateSale)
 		protected.POST("/createCreditSale", saleController.CreateCreditSale)
 
 		protected.POST("/paymentDebt", paymentController.PaymentDebt)
-
 
 		protected.GET("/sales/summary", dashboadController.GetSalesSummary)
 
