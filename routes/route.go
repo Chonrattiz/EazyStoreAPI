@@ -49,6 +49,8 @@ func SetupRouter() *gin.Engine {
 		protected.GET("/product/search", productController.GetProductBySearch)
 		protected.PUT("product/stock", productController.UpdateStock)
 		protected.PUT("/products/:id", productController.UpdateProduct)
+		// ✅ เพิ่มบรรทัดนี้ สำหรับลบสินค้า
+		protected.DELETE("/products/:id", productController.DeleteProduct)
 		protected.GET("/getNullBarcode", productController.GetNullBarcode)
 
 		protected.POST("/createDebtor", debtorController.CreateDebtor)
