@@ -821,6 +821,43 @@ paths:
       tags:
       - Product
   /api/products/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: 'ตรวจสอบก่อนลบ: ถ้าไม่เคยขายจะลบทิ้งเลย (Hard Delete) แต่ถ้าเคยขายแล้วจะซ่อนไว้
+        (Soft Delete: status = false)'
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'message: ลบสำเร็จ หรือ ซ่อนสินค้าสำเร็จ'
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: ไม่พบสินค้า
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: เกิดข้อผิดพลาดในการลบ
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: ลบสินค้า (Smart Delete)
+      tags:
+      - Product
     put:
       consumes:
       - application/json
