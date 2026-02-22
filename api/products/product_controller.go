@@ -356,3 +356,55 @@ func GetNullBarcode(c *gin.Context) {
 
 	c.JSON(http.StatusOK, products)
 }
+
+// DeleteProduct godoc
+// @Summary      ลบสินค้า (Smart Delete)
+// @Description  ตรวจสอบก่อนลบ: ถ้าไม่เคยขายจะลบทิ้งเลย (Hard Delete) แต่ถ้าเคยขายแล้วจะซ่อนไว้ (Soft Delete: status = false)
+// @Tags         Product
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "Product ID"
+// @Success      200  {object}  map[string]string "message: ลบสำเร็จ หรือ ซ่อนสินค้าสำเร็จ"
+// @Failure      404  {object}  map[string]string "ไม่พบสินค้า"
+// @Failure      500  {object}  map[string]string "เกิดข้อผิดพลาดในการลบ"
+// @Router       /api/products/{id} [delete]
+func DeleteProduct(c *gin.Context) {
+	productID := c.Param("id")
+
+	// 1. ตรวจสอบว่ามีสินค้านี้อยู่จริงไหม
+	var product models.Product
+	if err := database.DB.First(&product, productID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบสินค้ารหัสนี้"})
+		return
+	}
+
+	// 2. เช็คว่าสินค้านี้ เคยถูกขายไปหรือยัง? (เช็คจากตาราง sale_items)
+	var count int64
+	database.DB.Table("sale_items").Where("product_id = ?", productID).Count(&count)
+
+	if count > 0 {
+		// กรณีที่ 1: เคยถูกขายไปแล้ว -> ห้ามลบทิ้ง! ให้ทำ Soft Delete (อัปเดต status = false)
+		if err := database.DB.Model(&product).Update("status", false).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถเปลี่ยนสถานะสินค้าได้: " + err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "สินค้านี้เคยถูกขายแล้ว ระบบได้ทำการซ่อนสินค้าแทนการลบ",
+			"status":  "hidden",
+		})
+		return
+	}
+
+	// กรณีที่ 2: ยังไม่เคยถูกขายเลย (สร้างผิด) -> ลบทิ้งจากฐานข้อมูลได้เลย (Hard Delete)
+	if err := database.DB.Delete(&product).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบสินค้าได้: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "ลบสินค้าออกจากระบบสำเร็จ",
+		"status":  "deleted",
+	})
+}
