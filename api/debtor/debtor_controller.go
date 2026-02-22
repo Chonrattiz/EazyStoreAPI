@@ -122,3 +122,98 @@ func GetDebtorByAll (c *gin.Context) {
 
 	c.JSON(http.StatusOK, debtors)
 }
+
+/*
+func GetDebtorHistory(db *sql.DB, debtorID int) (*DebtorDetailResponse, error) {
+	var resp DebtorDetailResponse
+	var creditLimit sql.NullFloat64 // จัดการกรณี credit_limit เป็น NULL
+
+	// ==========================================
+	// 1. ดึงข้อมูล Profile ลูกหนี้
+	// ==========================================
+	err := db.QueryRow(`
+		SELECT debtor_id, name, phone, address, current_debt, credit_limit 
+		FROM debtors 
+		WHERE debtor_id = ?`, debtorID).
+		Scan(&resp.DebtorID, &resp.Name, &resp.Phone, &resp.Address, &resp.CurrentDebt, &creditLimit)
+
+	if err != nil {
+		return nil, err // ไม่เจอลูกหนี้ หรือ Database error
+	}
+
+	if creditLimit.Valid {
+		resp.CreditLimit = creditLimit.Float64
+		resp.CreditRemain = resp.CreditLimit - resp.CurrentDebt
+	}
+
+	// ==========================================
+	// 2. ดึงข้อมูลประวัติบิล (sales) และ สินค้า (sale_items + products)
+	// ==========================================
+	// ใช้ LEFT JOIN เพื่อให้ดึงบิลออกมาได้แม้จะไม่มี item (ป้องกัน data แหว่ง)
+	query := `
+		SELECT 
+			s.sale_id, s.created_at, s.net_price, s.pay,
+			si.amount, si.total_price,
+			p.name AS product_name
+		FROM sales s
+		JOIN sale_items si ON s.sale_id = si.sale_id
+		JOIN products p ON si.product_id = p.product_id
+		WHERE s.debtor_id = ? 
+		  AND s.net_price > s.pay  -- ดึงเฉพาะบิลที่ยอดซื้อมากกว่ายอดที่จ่าย (คือบิลที่ติดหนี้)
+		ORDER BY s.created_at DESC
+	`
+
+	rows, err := db.Query(query, debtorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	// ใช้ Map เพื่อจัดกลุ่ม Item เข้าไปในแต่ละบิล
+	billsMap := make(map[int]*DebtBill)
+	var billOrder []int // เก็บลำดับ sale_id เพื่อรักษา order ตอนแปลงกลับเป็น Slice
+
+	for rows.Next() {
+		var (
+			saleID      int
+			createdAt   time.Time
+			netPrice    float64
+			pay         float64
+			amount      int
+			totalPrice  float64
+			productName string
+		)
+
+		err := rows.Scan(&saleID, &createdAt, &netPrice, &pay, &amount, &totalPrice, &productName)
+		if err != nil {
+			return nil, err
+		}
+
+		// ถ้ายังไม่มีบิลนี้ใน map ให้สร้างใหม่
+		if _, exists := billsMap[saleID]; !exists {
+			billsMap[saleID] = &DebtBill{
+				SaleID:    saleID,
+				CreatedAt: createdAt.Format("02 Jan 2006 15:04"), // Format วันที่ตามต้องการ 
+				NetPrice:  netPrice,
+				Paid:      pay,
+				Remaining: netPrice - pay,
+				Items:     []DebtItem{},
+			}
+			billOrder = append(billOrder, saleID)
+		}
+
+		// นำสินค้าใส่เข้าไปในบิลนั้นๆ
+		billsMap[saleID].Items = append(billsMap[saleID].Items, DebtItem{
+			ProductName: productName,
+			Amount:      amount,
+			TotalPrice:  totalPrice,
+		})
+	}
+
+	// แปลง Map กลับเป็น Slice (Array) เพื่อใส่ใน Response
+	for _, id := range billOrder {
+		resp.Histories = append(resp.Histories, *billsMap[id])
+	}
+
+	return &resp, nil
+}*/
