@@ -3,6 +3,7 @@ package routes
 import (
 	resetController "EazyStoreAPI/api/ResetPassword"
 	authController "EazyStoreAPI/api/auth"
+	dashboadController "EazyStoreAPI/api/dashboad"
 	debtorController "EazyStoreAPI/api/debtor"
 	paymentController "EazyStoreAPI/api/payment"
 	productController "EazyStoreAPI/api/products"
@@ -58,6 +59,9 @@ func SetupRouter() *gin.Engine {
 		protected.POST("/createCreditSale", saleController.CreateCreditSale)
 
 		protected.POST("/paymentDebt", paymentController.PaymentDebt)
+
+
+		protected.GET("/sales/summary", dashboadController.GetSalesSummary)
 
 	}
 
