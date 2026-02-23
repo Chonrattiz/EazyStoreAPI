@@ -33,6 +33,16 @@ func CreateProduct(c *gin.Context) {
 		return
 	}
 
+	if input.Barcode != nil && *input.Barcode != "" {
+    var count int64
+    
+    database.DB.Model(&models.Product{}).Where("shop_id = ? AND barcode = ?", input.ShopID, *input.Barcode).Count(&count)
+    
+    if count > 0 {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "บาร์โค้ดนี้มีอยู่ในระบบของร้านนี้แล้ว"})
+        return
+    }
+}
 	//   สร้างรหัสสินค้า product_code
 	var lastProduct models.Product
 	var newCode string
