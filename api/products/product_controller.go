@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"EazyStoreAPI/database"
+	
 	"fmt"
 	"math"
 	"net/http"
@@ -44,7 +45,8 @@ func CreateProduct(c *gin.Context) {
 			return
 		}
 	}
-	//   สร้างรหัสสินค้า product_code
+
+	// สร้างรหัสสินค้า product_code
 	var lastProduct models.Product
 	var newCode string
 
@@ -56,12 +58,10 @@ func CreateProduct(c *gin.Context) {
 		newCode = fmt.Sprintf("ps%d_001", input.ShopID)
 	} else {
 		// แยก String ด้วยเครื่องหมาย "_" (จะได้ ["ps1", "005"])
-
 		parts := strings.Split(lastProduct.ProductCode, "_")
 
 		if len(parts) == 2 {
 			// แปลงจาก string เป็น int และ ผลลัพธ์ จาก "005" กลายเป็นเลข 5
-			// Atoi ย่อมาจาก ASCII to Integer
 			currentNum, err := strconv.Atoi(parts[1])
 
 			if err == nil {
@@ -85,7 +85,28 @@ func CreateProduct(c *gin.Context) {
 		return
 	}
 
-	//  Return Success
+	// ---------------------------------------------------------
+	// ✨ ส่วนที่เพิ่ม: บันทึกราคาเริ่มต้นลง Log (Manual Trigger)
+	// ทำหลังจาก Create สำเร็จ เพื่อให้ได้ input.ProductID ออกมาก่อน
+	// ---------------------------------------------------------
+
+	// 1. บันทึกราคาขายเริ่มต้น (Sell Price Log)
+	// ให้ราคาเก่าเป็น 0 เพื่อเป็นจุดสังเกตว่านี่คือราคาตั้งต้นตอนสร้างสินค้า
+	go database.DB.Exec(`
+		INSERT INTO sell_price_logs (product_id, sell_price_old, sell_price_new) 
+		VALUES (?, ?, ?)`,
+		input.ProductID, 0, input.SellPrice,
+	)
+
+	// 2. บันทึกราคาต้นทุนเริ่มต้น (Cost Price Log)
+	go database.DB.Exec(`
+		INSERT INTO cost_price_logs (product_id, cost_price_old, cost_price_new) 
+		VALUES (?, ?, ?)`,
+		input.ProductID, 0, input.CostPrice,
+	)
+	// ---------------------------------------------------------
+
+	// Return Success
 	c.JSON(http.StatusOK, gin.H{
 		"message": "บันทึกสินค้าสำเร็จ",
 		"data":    input,

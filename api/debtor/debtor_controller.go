@@ -281,3 +281,81 @@ func GetDebtorHistory(c *gin.Context) {
 		"histories":     histories,
 	})
 }
+
+// UpdateDebtor godoc
+// @Summary      แก้ไขข้อมูลลูกหนี้
+// @Description  แก้ไขข้อมูลลูกหนี้ตาม ID (อัปเดตเฉพาะฟิลด์ที่ส่งมา)
+// @Tags         Debtor
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path int true "รหัสลูกหนี้ (Debtor ID)"
+// @Param        Debtor body map[string]interface{} true "ข้อมูลลูกหนี้ที่ต้องการแก้ไข"
+// @Success      200  {object} map[string]interface{}
+// @Failure      400  {object} map[string]string
+// @Failure      404  {object} map[string]string
+// @Router       /api/debtors/{id} [put]
+func UpdateDebtor(c *gin.Context) {
+	// 1. รับ ID ของลูกหนี้จาก URL Parameter
+	debtorID := c.Param("id")
+
+	// 2. ค้นหาลูกหนี้เดิมใน Database ว่ามีอยู่จริงไหม
+	var debtor models.Debtor
+	if err := database.DB.First(&debtor, debtorID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลลูกหนี้รหัสนี้"})
+		return
+	}
+
+	// 3. รับข้อมูลที่ส่งมาแบบ Map (เพื่อทำ Partial Update)
+	var inputMap map[string]interface{}
+	if err := c.ShouldBindJSON(&inputMap); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "รูปแบบข้อมูลไม่ถูกต้อง: " + err.Error()})
+		return
+	}
+
+	// 4. กรองข้อมูล (White-list) เฉพาะฟิลด์ที่อนุญาตให้แก้ไข
+	updateData := make(map[string]interface{})
+	allowedFields := []string{
+		"name", 
+		"phone", 
+		"address", 
+		"img_debtor", 
+		"credit_limit", 
+		// ⚠️ ไม่ใส่ "current_debt", "shop_id", "debtor_id" เพื่อความปลอดภัยของระบบ
+	}
+
+	for _, field := range allowedFields {
+		if val, exists := inputMap[field]; exists {
+			updateData[field] = val
+		}
+	}
+
+	// ถ้าไม่ได้ส่งอะไรมาเปลี่ยนเลย ให้ตอบกลับไปเลยเพื่อประหยัดการทำงานของ DB
+	if len(updateData) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "ไม่มีข้อมูลเปลี่ยนแปลง",
+			"data":    debtor,
+		})
+		return
+	}
+
+	// 5. สั่งอัปเดตลง Database
+	if err := database.DB.Model(&debtor).Updates(updateData).Error; err != nil {
+		// เช็คกรณีแก้เบอร์โทร แล้วเผลอไปซ้ำกับลูกหนี้คนอื่นในร้าน (MySQL Error 1062)
+		if strings.Contains(err.Error(), "1062") || strings.Contains(err.Error(), "Duplicate entry") {
+			c.JSON(http.StatusConflict, gin.H{"error": "เบอร์โทรศัพท์นี้มีในระบบของร้านท่านแล้ว"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอัปเดตข้อมูลได้: " + err.Error()})
+		return
+	}
+
+	// 6. ดึงข้อมูลล่าสุดกลับไปแสดงผล
+	var updatedDebtor models.Debtor
+	database.DB.First(&updatedDebtor, debtorID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "แก้ไขข้อมูลลูกหนี้สำเร็จ",
+		"data":    updatedDebtor,
+	})
+}

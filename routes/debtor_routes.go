@@ -11,4 +11,5 @@ func DebtorRoutes(rg *gin.RouterGroup) {
 	rg.GET("/debtors", debtorController.GetDebtorByAll)           // ดึงลูกหนี้ทั้งหมด
 	rg.GET("/debtors/search", debtorController.GetDebtorBySearch) // ค้นหาลูกหนี้
 	rg.GET("/debtors/:id/history", debtorController.GetDebtorHistory) // ประวัติลูกหนี้
+	rg.PUT("/debtors/:id", debtorController.UpdateDebtor) 		  // แก้ไขข้อมูลลูกหนี้
 }
