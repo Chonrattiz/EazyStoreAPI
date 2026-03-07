@@ -33,24 +33,24 @@ func Register(c *gin.Context) {
         return
     }
 
-    // 1. ตรวจสอบว่ามี Username หรือเบอร์นี้อยู่แล้วหรือไม่
+ 
     var existingUser models.User
     result := database.DB.Where("username = ? OR phone = ?", input.Username, input.Phone).First(&existingUser)
 
     if result.Error == nil {
-        // เคสที่ 1: มี User นี้แล้ว และยืนยันตัวตนสำเร็จแล้ว -> ห้ามสมัครซ้ำ
+       
         if existingUser.IsVerified {
             c.JSON(http.StatusConflict, gin.H{"error": "Username หรือ เบอร์โทรนี้ถูกใช้งานแล้ว"})
             return
         }
         
-        // เคสที่ 2: มี User แล้วแต่ยังไม่ยืนยัน -> อนุญาตให้อัปเดตข้อมูล (เช่น เปลี่ยนอีเมล)
+       
         hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(input.Password), 14)
         existingUser.Email = input.Email
         existingUser.Password = string(hashedPassword)
         database.DB.Save(&existingUser)
     } else {
-        // เคสที่ 3: ยังไม่มี User นี้เลย -> สร้างใหม่ตามปกติ
+      
         hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(input.Password), 14)
         existingUser = models.User{
             Username:   input.Username,
@@ -65,7 +65,7 @@ func Register(c *gin.Context) {
         }
     }
 
-    // 🔥 ส่ง/อัปเดต OTP ใหม่เสมอ
+   
     otp := resetController.GenerateOTP()
     verification := models.EmailVerification{
         Email:     input.Email,
@@ -90,22 +90,21 @@ func VerifyRegistration(c *gin.Context) {
     }
 
     var record models.EmailVerification
-    // 1. ตรวจสอบรหัสจากตาราง email_verifications
+    
     if err := database.DB.Where("email = ? AND otp_code = ?", input.Email, input.OTP).First(&record).Error; err != nil {
         c.JSON(400, gin.H{"error": "รหัส OTP ไม่ถูกต้อง หรือหมดอายุ"})
         return
     }
 
-    // 2. ตรวจสอบเวลาหมดอายุ
     if time.Now().After(record.ExpiresAt) {
         c.JSON(400, gin.H{"error": "รหัส OTP หมดอายุแล้ว"})
         return
     }
 
-    // 3. ปลดล็อก User (เปลี่ยน is_verified เป็น true)
+ 
     database.DB.Model(&models.User{}).Where("email = ?", input.Email).Update("is_verified", true)
     
-    // 4. ลบ OTP ทิ้ง
+   
     database.DB.Delete(&record)
 
     c.JSON(200, gin.H{"message": "ยืนยันอีเมลสำเร็จแล้ว คุณสามารถเข้าสู่ระบบได้ทันที"})
