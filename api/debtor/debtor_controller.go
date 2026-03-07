@@ -7,6 +7,7 @@ import (
 	"EazyStoreAPI/models"
 
 	"strings"
+	"math"
 
 	"fmt"
 	"strconv"
@@ -103,6 +104,9 @@ func GetDebtorBySearch(c *gin.Context) {
 // @Router       /api/debtor [get]
 func GetDebtorByAll(c *gin.Context) {
 	shopID := c.Query("shop_id")
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	search := c.Query("search") // เพิ่มค้นหาด้วย
 
 	if shopID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ shop_id"})
@@ -110,19 +114,37 @@ func GetDebtorByAll(c *gin.Context) {
 	}
 
 	var debtors []models.Debtor
+	var totalItems int64
 
-	result := database.DB.Where("shop_id = ?", shopID).Find(&debtors)
+	// สร้าง Query พื้นฐาน
+	query := database.DB.Model(&models.Debtor{}).Where("shop_id = ?", shopID)
+
+	// Filter ค้นหาชื่อหรือเบอร์โทร
+	if search != "" {
+		query = query.Where("name LIKE ? OR phone LIKE ?", "%"+search+"%", "%"+search+"%")
+	}
+
+	// นับจำนวนรวม
+	query.Count(&totalItems)
+
+	// Pagination และเรียงตาม ID (ใหม่ไปเก่า)
+	offset := (page - 1) * limit
+	result := query.Order("debtor_id DESC").Limit(limit).Offset(offset).Find(&debtors)
 
 	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในการดึงข้อมูล"})
-		return
-	}
-	if len(debtors) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลลูกหนี้"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาด"})
 		return
 	}
 
-	c.JSON(http.StatusOK, debtors)
+	totalPages := int(math.Ceil(float64(totalItems) / float64(limit)))
+
+	// ส่งกลับรูปแบบเดียวกับ Product
+	c.JSON(http.StatusOK, gin.H{
+		"items":        debtors,
+		"total_items":  totalItems,
+		"total_pages":  totalPages,
+		"current_page": page,
+	})
 }
 
 // GetDebtorHistory godoc
