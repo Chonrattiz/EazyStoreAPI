@@ -5,6 +5,8 @@ import (
 	"EazyStoreAPI/models"
 	"net/http"
 	"time"
+	"strconv"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -90,4 +92,53 @@ func PaymentDebt(c *gin.Context) {
 		"new_debt":   newTotalDebt,
 		"payment_id": newPayment.PaymentID,
 	})
+}
+
+
+// GetDebtorPaymentHistory godoc
+// @Summary      ดึงประวัติการจ่ายหนี้
+// @Description  ดึงรายการที่ลูกหนี้เคยนำเงินมาจ่ายจริง
+// @Tags         Debtor
+// @Router       /api/payments/{id} [get]
+func GetDebtorPaymentHistory(c *gin.Context) {
+    idParam := c.Param("id")
+    debtorID, _ := strconv.Atoi(idParam)
+
+    var payments []models.DebtPayment
+    // ดึงข้อมูลประวัติการจ่ายเงิน เรียงจากล่าสุดไปหาเก่าสุด
+    if err := database.DB.Where("debtor_id = ?", debtorID).
+        Order("payment_date desc").
+        Find(&payments).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลการจ่ายเงินได้"})
+        return
+    }
+
+    thaiMonths := []string{"", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."}
+
+    var result []gin.H
+    for _, p := range payments {
+        // ฟอร์แมตวันที่แบบไทย
+        dateStr := fmt.Sprintf("%02d %s %d %02d:%02d", 
+            p.PaymentDate.Day(), 
+            thaiMonths[p.PaymentDate.Month()], 
+            p.PaymentDate.Year()+543,
+            p.PaymentDate.Hour(),
+            p.PaymentDate.Minute(),
+        )
+
+        result = append(result, gin.H{
+            "payment_id":     p.PaymentID,
+            "amount_paid":    p.AmountPaid,
+            "method":         p.PaymentMethod, // เช่น เงินสด, โอนเงิน
+            "remaining_debt": p.CurrentDebt,   // ยอดหนี้ที่เหลือหลังจ่ายรอบนั้น
+            "date":           dateStr,
+            "recorded_by":    p.RecordedBy,
+        })
+    }
+
+    if result == nil {
+        result = []gin.H{}
+    }
+
+    c.JSON(http.StatusOK, result)
 }
