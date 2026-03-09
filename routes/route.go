@@ -24,6 +24,7 @@ func SetupRouter() *gin.Engine {
 		PaymentRoutes(protectedGroup)
 		DashboardRoutes(protectedGroup)
 		ProfileRoutes(protectedGroup)
+		OrderListRoutes(protectedGroup)
 	}
 
 	return r
