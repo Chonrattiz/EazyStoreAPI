@@ -27,123 +27,117 @@ import (
 // @Success      200 {object} object "status: success"
 // @Router       /api/auth/register [post]
 func Register(c *gin.Context) {
-    var input models.RegisterInput
-    if err := c.ShouldBindJSON(&input); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-        return
-    }
+	var input models.RegisterInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
- 
-    var existingUser models.User
-    result := database.DB.Where("username = ? OR phone = ?", input.Username, input.Phone).First(&existingUser)
+	var existingUser models.User
+	result := database.DB.Where("email = ? OR phone = ?", input.Email, input.Phone).First(&existingUser)
 
-    if result.Error == nil {
-       
-        if existingUser.IsVerified {
-            c.JSON(http.StatusConflict, gin.H{"error": "Username หรือ เบอร์โทรนี้ถูกใช้งานแล้ว"})
-            return
-        }
-        
-       
-        hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(input.Password), 14)
-        existingUser.Email = input.Email
-        existingUser.Password = string(hashedPassword)
-        database.DB.Save(&existingUser)
-    } else {
-      
-        hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(input.Password), 14)
-        existingUser = models.User{
-            Username:   input.Username,
-            Password:   string(hashedPassword),
-            Email:      input.Email,
-            Phone:      input.Phone,
-            IsVerified: false,
-        }
-        if err := database.DB.Create(&existingUser).Error; err != nil {
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างบัญชีได้"})
-            return
-        }
-    }
+	if result.Error == nil {
 
-   
-    otp := resetController.GenerateOTP()
-    verification := models.EmailVerification{
-        Email:     input.Email,
-        OTPCode:   otp,
-        ExpiresAt: time.Now().Add(15 * time.Minute),
-    }
-    database.DB.Save(&verification)
+		if existingUser.IsVerified {
+			c.JSON(http.StatusConflict, gin.H{"error": "Email หรือ เบอร์โทรนี้ถูกใช้งานแล้ว"})
+			return
+		}
 
-    go resetController.SendEmailOTP(input.Email, otp)
+		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(input.Password), 14)
+		existingUser.Email = input.Email
+		existingUser.Password = string(hashedPassword)
+		database.DB.Save(&existingUser)
+	} else {
 
-    c.JSON(http.StatusOK, gin.H{"message": "ระบบส่งรหัส OTP ไปยังอีเมลใหม่เรียบร้อยแล้ว"})
+		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(input.Password), 14)
+		existingUser = models.User{
+			Username:   input.Username,
+			Password:   string(hashedPassword),
+			Email:      input.Email,
+			Phone:      input.Phone,
+			IsVerified: false,
+		}
+		if err := database.DB.Create(&existingUser).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างบัญชีได้"})
+			return
+		}
+	}
+
+	otp := resetController.GenerateOTP()
+	verification := models.EmailVerification{
+		Email:     input.Email,
+		OTPCode:   otp,
+		ExpiresAt: time.Now().Add(15 * time.Minute),
+	}
+	database.DB.Save(&verification)
+
+	go resetController.SendEmailOTP(input.Email, otp)
+
+	c.JSON(http.StatusOK, gin.H{"message": "ระบบส่งรหัส OTP ไปยังอีเมลใหม่เรียบร้อยแล้ว"})
 }
 
 func VerifyRegistration(c *gin.Context) {
-    var input struct {
-        Email string `json:"email" binding:"required"`
-        OTP   string `json:"otp" binding:"required"`
-    }
-    if err := c.ShouldBindJSON(&input); err != nil {
-        c.JSON(400, gin.H{"error": "กรุณากรอกข้อมูลให้ครบ"})
-        return
-    }
+	var input struct {
+		Email string `json:"email" binding:"required"`
+		OTP   string `json:"otp" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(400, gin.H{"error": "กรุณากรอกข้อมูลให้ครบ"})
+		return
+	}
 
-    var record models.EmailVerification
-    
-    if err := database.DB.Where("email = ? AND otp_code = ?", input.Email, input.OTP).First(&record).Error; err != nil {
-        c.JSON(400, gin.H{"error": "รหัส OTP ไม่ถูกต้อง หรือหมดอายุ"})
-        return
-    }
+	var record models.EmailVerification
 
-    if time.Now().After(record.ExpiresAt) {
-        c.JSON(400, gin.H{"error": "รหัส OTP หมดอายุแล้ว"})
-        return
-    }
+	if err := database.DB.Where("email = ? AND otp_code = ?", input.Email, input.OTP).First(&record).Error; err != nil {
+		c.JSON(400, gin.H{"error": "รหัส OTP ไม่ถูกต้อง หรือหมดอายุ"})
+		return
+	}
 
- 
-    database.DB.Model(&models.User{}).Where("email = ?", input.Email).Update("is_verified", true)
-    
-   
-    database.DB.Delete(&record)
+	if time.Now().After(record.ExpiresAt) {
+		c.JSON(400, gin.H{"error": "รหัส OTP หมดอายุแล้ว"})
+		return
+	}
 
-    c.JSON(200, gin.H{"message": "ยืนยันอีเมลสำเร็จแล้ว คุณสามารถเข้าสู่ระบบได้ทันที"})
+	database.DB.Model(&models.User{}).Where("email = ?", input.Email).Update("is_verified", true)
+
+	database.DB.Delete(&record)
+
+	c.JSON(200, gin.H{"message": "ยืนยันอีเมลสำเร็จแล้ว คุณสามารถเข้าสู่ระบบได้ทันที"})
 }
 
-
 func ChangeEmailBeforeVerify(c *gin.Context) {
-    var input struct {
-        Username string `json:"username" binding:"required"`
-        NewEmail string `json:"new_email" binding:"required,email"`
-    }
-    if err := c.ShouldBindJSON(&input); err != nil {
-        c.JSON(400, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
-        return
-    }
+	var input struct {
+		Username string `json:"username" binding:"required"`
+		NewEmail string `json:"new_email" binding:"required,email"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(400, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
+		return
+	}
 
-    // ค้นหา User ที่ยังไม่ยืนยัน
-    var user models.User
-    if err := database.DB.Where("username = ? AND is_verified = ?", input.Username, false).First(&user).Error; err != nil {
-        c.JSON(404, gin.H{"error": "ไม่พบข้อมูลผู้ใช้ที่รอการยืนยัน"})
-        return
-    }
+	// ค้นหา User ที่ยังไม่ยืนยัน
+	var user models.User
+	if err := database.DB.Where("username = ? AND is_verified = ?", input.Username, false).First(&user).Error; err != nil {
+		c.JSON(404, gin.H{"error": "ไม่พบข้อมูลผู้ใช้ที่รอการยืนยัน"})
+		return
+	}
 
-    // อัปเดตอีเมลใหม่
-    user.Email = input.NewEmail
-    database.DB.Save(&user)
+	// อัปเดตอีเมลใหม่
+	user.Email = input.NewEmail
+	database.DB.Save(&user)
 
-    // ส่ง OTP ใหม่ไปที่เมลใหม่
-    otp := resetController.GenerateOTP()
-    verification := models.EmailVerification{
-        Email:     input.NewEmail,
-        OTPCode:   otp,
-        ExpiresAt: time.Now().Add(15 * time.Minute),
-    }
-    database.DB.Save(&verification)
+	// ส่ง OTP ใหม่ไปที่เมลใหม่
+	otp := resetController.GenerateOTP()
+	verification := models.EmailVerification{
+		Email:     input.NewEmail,
+		OTPCode:   otp,
+		ExpiresAt: time.Now().Add(15 * time.Minute),
+	}
+	database.DB.Save(&verification)
 
-    go resetController.SendEmailOTP(input.NewEmail, otp)
+	go resetController.SendEmailOTP(input.NewEmail, otp)
 
-    c.JSON(200, gin.H{"message": "อัปเดตอีเมลและส่งรหัส OTP ใหม่แล้ว"})
+	c.JSON(200, gin.H{"message": "อัปเดตอีเมลและส่งรหัส OTP ใหม่แล้ว"})
 }
 
 // --------------------------------------------------------------------
@@ -159,69 +153,69 @@ func ChangeEmailBeforeVerify(c *gin.Context) {
 // @Router       /api/auth/login [post]
 // Login ฟังก์ชันสำหรับการเข้าสู่ระบบ
 func Login(c *gin.Context) {
-    var input models.LoginInput
+	var input models.LoginInput
 
-    // 1. ตรวจสอบว่ากรอกข้อมูลมาครบถ้วนหรือไม่
-    if err := c.ShouldBindJSON(&input); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกข้อมูลให้ครบถ้วน"})
-        return
-    }
+	// 1. ตรวจสอบว่ากรอกข้อมูลมาครบถ้วนหรือไม่
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกข้อมูลให้ครบถ้วน"})
+		return
+	}
 
-    var user models.User
-    // ข้อความ Error แบบกลางเพื่อความปลอดภัย (User Enumeration Protection)
-    invalidMsg := "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง"
+	var user models.User
+	// ข้อความ Error แบบกลางเพื่อความปลอดภัย (User Enumeration Protection)
+	invalidMsg := "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง"
 
-    // 2. ค้นหาผู้ใช้งานด้วย Email หรือเบอร์โทรศัพท์
-    if err := database.DB.Where("email = ? OR phone = ?", input.Username, input.Username).First(&user).Error; err != nil {
-        // หากไม่พบผู้ใช้ ให้ตอบกลับด้วยข้อความกลาง
-        c.JSON(http.StatusUnauthorized, gin.H{"error": invalidMsg})
-        return
-    }
+	// 2. ค้นหาผู้ใช้งานด้วย Email หรือเบอร์โทรศัพท์
+	if err := database.DB.Where("email = ? OR phone = ?", input.Username, input.Username).First(&user).Error; err != nil {
+		// หากไม่พบผู้ใช้ ให้ตอบกลับด้วยข้อความกลาง
+		c.JSON(http.StatusUnauthorized, gin.H{"error": invalidMsg})
+		return
+	}
 
-    // 3. ✨ ตรวจสอบว่าผู้ใช้งานยืนยันอีเมล (OTP) แล้วหรือยัง
-    if !user.IsVerified {
-    c.JSON(http.StatusForbidden, gin.H{
-        "error":       "กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าสู่ระบบ",
-        "is_verified": false,
-        "email":       user.Email,    // ส่งเมลจริงจาก DB
-        "username":    user.Username, // ✨ ต้องส่ง Username จริงกลับไปด้วย!
-    })
-    return
-}
+	// 3. ✨ ตรวจสอบว่าผู้ใช้งานยืนยันอีเมล (OTP) แล้วหรือยัง
+	if !user.IsVerified {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":       "กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าสู่ระบบ",
+			"is_verified": false,
+			"email":       user.Email,    // ส่งเมลจริงจาก DB
+			"username":    user.Username, // ✨ ต้องส่ง Username จริงกลับไปด้วย!
+		})
+		return
+	}
 
-    // 4. ตรวจสอบรหัสผ่านโดยใช้ Bcrypt
-    err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password))
-    if err != nil {
-        // หากรหัสผ่านผิด ให้ตอบกลับด้วยข้อความกลาง
-        c.JSON(http.StatusUnauthorized, gin.H{"error": invalidMsg})
-        return
-    }
+	// 4. ตรวจสอบรหัสผ่านโดยใช้ Bcrypt
+	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password))
+	if err != nil {
+		// หากรหัสผ่านผิด ให้ตอบกลับด้วยข้อความกลาง
+		c.JSON(http.StatusUnauthorized, gin.H{"error": invalidMsg})
+		return
+	}
 
-    // 5. สร้าง JWT Token (มีอายุ 24 ชั่วโมง)
-    claims := jwt.MapClaims{
-        "user_id":  user.UserID,
-        "username": user.Username,
-        "exp":      time.Now().Add(time.Hour * 24).Unix(),
-    }
+	// 5. สร้าง JWT Token (มีอายุ 24 ชั่วโมง)
+	claims := jwt.MapClaims{
+		"user_id":  user.UserID,
+		"username": user.Username,
+		"exp":      time.Now().Add(time.Hour * 24).Unix(),
+	}
 
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    secretKey := os.Getenv("JWT_SECRET")
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	secretKey := os.Getenv("JWT_SECRET")
 
-    tokenString, err := token.SignedString([]byte(secretKey))
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างรหัสการเข้าถึงได้"})
-        return
-    }
+	tokenString, err := token.SignedString([]byte(secretKey))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างรหัสการเข้าถึงได้"})
+		return
+	}
 
-    // 6. ส่งข้อมูลกลับเมื่อ Login สำเร็จ
-    c.JSON(http.StatusOK, gin.H{
-        "message": "เข้าสู่ระบบสำเร็จ",
-        "token":   tokenString,
-        "user": gin.H{
-            "id":       user.UserID,
-            "username": user.Username,
-            "email":    user.Email,
-            "phone":    user.Phone,
-        },
-    })
+	// 6. ส่งข้อมูลกลับเมื่อ Login สำเร็จ
+	c.JSON(http.StatusOK, gin.H{
+		"message": "เข้าสู่ระบบสำเร็จ",
+		"token":   tokenString,
+		"user": gin.H{
+			"id":       user.UserID,
+			"username": user.Username,
+			"email":    user.Email,
+			"phone":    user.Phone,
+		},
+	})
 }
