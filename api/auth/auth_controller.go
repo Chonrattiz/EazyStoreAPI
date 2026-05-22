@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -71,7 +72,14 @@ func Register(c *gin.Context) {
 	}
 	database.DB.Save(&verification)
 
-	go resetController.SendEmailOTP(input.Email, otp)
+	go func() {
+		err := resetController.SendEmailOTP(input.Email, otp)
+		if err != nil {
+			fmt.Printf("Register - Error sending email OTP to %s: %v\n", input.Email, err)
+		} else {
+			fmt.Printf("Register - Successfully sent OTP to %s\n", input.Email)
+		}
+	}()
 
 	c.JSON(http.StatusOK, gin.H{"message": "ระบบส่งรหัส OTP ไปยังอีเมลใหม่เรียบร้อยแล้ว"})
 }
@@ -135,7 +143,14 @@ func ChangeEmailBeforeVerify(c *gin.Context) {
 	}
 	database.DB.Save(&verification)
 
-	go resetController.SendEmailOTP(input.NewEmail, otp)
+	go func() {
+		err := resetController.SendEmailOTP(input.NewEmail, otp)
+		if err != nil {
+			fmt.Printf("ChangeEmailBeforeVerify - Error sending email OTP to %s: %v\n", input.NewEmail, err)
+		} else {
+			fmt.Printf("ChangeEmailBeforeVerify - Successfully sent OTP to %s\n", input.NewEmail)
+		}
+	}()
 
 	c.JSON(200, gin.H{"message": "อัปเดตอีเมลและส่งรหัส OTP ใหม่แล้ว"})
 }
