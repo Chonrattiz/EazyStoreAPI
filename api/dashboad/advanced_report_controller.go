@@ -3,6 +3,7 @@ package controller
 import (
 	"EazyStoreAPI/database"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,12 +33,39 @@ func GetAdvancedReport(c *gin.Context) {
 			Order("date ASC").
 			Scan(&salesChart)
 	} else {
+		var rawSalesChart []ChartItem
 		database.DB.Table("sales").
 			Select("DATE(created_at) as date, COALESCE(SUM(net_price), 0) as total_sales").
 			Where("shop_id = ? AND created_at >= ? AND created_at <= ?", shopID, startDate, endDate).
 			Group("DATE(created_at)").
 			Order("date ASC").
-			Scan(&salesChart)
+			Scan(&rawSalesChart)
+
+		// Create a map for quick lookup
+		salesMap := make(map[string]float64)
+		for _, item := range rawSalesChart {
+			// Extract just the "YYYY-MM-DD" part in case it has time part appended
+			dateOnly := item.Date
+			if len(dateOnly) >= 10 {
+				dateOnly = dateOnly[:10]
+			}
+			salesMap[dateOnly] = item.TotalSales
+		}
+
+		// Generate all dates between startDate and endDate
+		start, err1 := time.Parse("2006-01-02", startDate)
+		end, err2 := time.Parse("2006-01-02", endDate)
+		if err1 == nil && err2 == nil {
+			for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+				dateStr := d.Format("2006-01-02")
+				salesChart = append(salesChart, ChartItem{
+					Date:       dateStr,
+					TotalSales: salesMap[dateStr],
+				})
+			}
+		} else {
+			salesChart = rawSalesChart
+		}
 	}
 
 	// 1.5 Summary Stats (Transactions, Net Sales, Average)
