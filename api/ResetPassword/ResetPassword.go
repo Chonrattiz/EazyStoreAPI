@@ -1,11 +1,12 @@
 package controllers
 
 import (
+	"bytes"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"math/big"
-	"net/smtp"
-	"os"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -23,21 +24,10 @@ func GenerateOTP() string {
 	return fmt.Sprintf("%06d", n)
 }
 
-// ✅ SendEmailOTP เปลี่ยนมาใช้ Gmail SMTP
+// ✅ SendEmailOTP เปลี่ยนมาใช้ Google Apps Script (ยิงผ่าน HTTP พอร์ต 443 ทะลุ Render 100%)
 func SendEmailOTP(targetEmail string, otpCode string) error {
-	// ดึงรหัสผ่าน 16 หลักจาก Environment Variable
-	password := os.Getenv("GMAIL_APP_PASSWORD")
-
-	// ใช้อีเมลทางการของร้านเป็นตัวส่ง
-	from := "eazystorepos.official@gmail.com"
-
-	// ตั้งค่า Server ของ Gmail
-	smtpHost := "smtp.gmail.com"
-	smtpPort := "587"
-
-	// โครงสร้างอีเมล (ใส่ Header ของอีเมลให้ถูกต้อง)
-	subject := "Subject: Eazy Store - ยืนยันรหัสผ่านใหม่\n"
-	mime := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
+	// ⚠️ สำคัญ: เอา URL ของ Google Apps Script ที่ได้จากขั้นตอน Deploy มาใส่ในเครื่องหมายคำพูดด้านล่างนี้
+	gasURL := "https://script.google.com/macros/s/AKfycbwcD_xWq5Z22Xbiy3QPVGh9KctJI1nBrHLK6xavgMr9hWAWhgM3_4GGRD8vXZs5mffp/exec"
 
 	// โครงสร้าง HTML เดิมที่สวยงาม
 	htmlContent := fmt.Sprintf(`
@@ -56,21 +46,27 @@ func SendEmailOTP(targetEmail string, otpCode string) error {
 	</body>
 	</html>`, otpCode)
 
-	// นำส่วนประกอบทั้งหมดมารวมกันเป็นก้อนเดียว
-	msg := []byte(subject + mime + htmlContent)
+	// สร้างข้อมูล JSON สำหรับส่งไปให้ Google
+	requestBody, _ := json.Marshal(map[string]string{
+		"to":       targetEmail,
+		"subject":  "Eazy Store - ยืนยันรหัสผ่านใหม่",
+		"htmlBody": htmlContent,
+	})
 
-	// สร้างการยืนยันตัวตนสำหรับล็อกอินเข้า Gmail
-	auth := smtp.PlainAuth("", from, password, smtpHost)
-
-	// สั่งส่งอีเมลผ่านพอร์ต 587
-	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, []string{targetEmail}, msg)
+	// ยิง HTTP POST ไปที่ Google Script
+	resp, err := http.Post(gasURL, "application/json", bytes.NewBuffer(requestBody))
 	if err != nil {
-		fmt.Println("❌ Error sending email via Gmail SMTP:", err)
+		fmt.Println("❌ Error connecting to Google Script:", err.Error())
 		return err
 	}
+	defer resp.Body.Close()
 
-	fmt.Println("✅ ส่ง OTP สำเร็จผ่าน Gmail SMTP!")
-	return nil
+	if resp.StatusCode == 200 {
+		fmt.Println("✅ ส่ง OTP สำเร็จผ่าน Google Apps Script ทะลุ Render แล้ว!")
+		return nil
+	}
+
+	return fmt.Errorf("failed to send email, status code: %d", resp.StatusCode)
 }
 
 // RequestResetOTP ฟังก์ชันสำหรับรับเรื่องกู้รหัสผ่าน
