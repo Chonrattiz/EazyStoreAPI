@@ -1,14 +1,16 @@
 package controllers
 
 import (
+	"bytes"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"math/big"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/resend/resend-go/v2" // ✅ นำเข้าแพ็กเกจ Resend
 	"golang.org/x/crypto/bcrypt"
 
 	// 👇 แก้ Path ให้ตรงกับโฟลเดอร์ในเครื่องของคุณ
@@ -23,47 +25,72 @@ func GenerateOTP() string {
 	return fmt.Sprintf("%06d", n)
 }
 
-// ✅ SendEmailOTP เปลี่ยนมาใช้ Resend API แทน SMTP
+// ✅ SendEmailOTP เปลี่ยนมาใช้ Brevo API แทน Resend
 func SendEmailOTP(targetEmail string, otpCode string) error {
-	// ดึง API Key จากไฟล์ .env หรือ Environment Variable
-	apiKey := os.Getenv("RESEND_API_KEY")
-	client := resend.NewClient(apiKey)
+	// ดึง API Key ของ Brevo จาก Environment Variable
+	apiKey := os.Getenv("BREVO_API_KEY")
 
-	// โครงสร้าง HTML เดิมของคุณ (สวยงามอยู่แล้ว นำมาใช้ต่อได้เลย)
-	body := fmt.Sprintf(`
-    <html>
-    <body style="font-family: Arial, sans-serif;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-            <h2 style="color: #007bff; text-align: center;">Eazy Store POS</h2>
-            <hr>
-            <div style="padding: 20px; text-align: center;">
-                <p>รหัสยืนยัน (OTP) ของคุณคือ:</p>
-                <h1 style="background: #f4f4f4; padding: 15px; display: inline-block; letter-spacing: 5px; color: #333; border-radius: 5px;">%s</h1>
-                <p>รหัสนี้จะหมดอายุภายใน <b>10 นาที</b></p>
-                <p style="color: #888; font-size: 12px;">หากคุณไม่ได้ขอรหัสนี้ โปรดแจ้งให้เราทราบทันที</p>
-            </div>
-        </div>
-    </body>
-    </html>`, otpCode)
+	// ใช้อีเมลที่คุณยืนยันใน Brevo แล้วเป็นผู้ส่ง
+	senderEmail := "eazystorepos.official@gmail.com"
 
-	// ตั้งค่าการส่งอีเมล
-	params := &resend.SendEmailRequest{
-		// ⚠️ ข้อควรระวัง: บัญชีฟรีของ Resend ต้องส่งจากอีเมลด้านล่างนี้เท่านั้น
-		From:    "Eazy Store <onboarding@resend.dev>",
-		To:      []string{targetEmail},
-		Subject: "Eazy Store - ยืนยันรหัสผ่านใหม่",
-		Html:    body,
-	}
+	// โครงสร้าง HTML เดิม (สวยงามอยู่แล้ว)
+	htmlContent := fmt.Sprintf(`
+	<html>
+	<body style="font-family: Arial, sans-serif;">
+		<div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+			<h2 style="color: #007bff; text-align: center;">Eazy Store POS</h2>
+			<hr>
+			<div style="padding: 20px; text-align: center;">
+				<p>รหัสยืนยัน (OTP) ของคุณคือ:</p>
+				<h1 style="background: #f4f4f4; padding: 15px; display: inline-block; letter-spacing: 5px; color: #333; border-radius: 5px;">%s</h1>
+				<p>รหัสนี้จะหมดอายุภายใน <b>10 นาที</b></p>
+				<p style="color: #888; font-size: 12px;">หากคุณไม่ได้ขอรหัสนี้ โปรดแจ้งให้เราทราบทันที</p>
+			</div>
+		</div>
+	</body>
+	</html>`, otpCode)
 
-	// ยิง API ส่งอีเมล
-	sent, err := client.Emails.Send(params)
+	// สร้าง JSON Body สำหรับยิง API ของ Brevo
+	requestBody, _ := json.Marshal(map[string]interface{}{
+		"sender": map[string]string{
+			"name":  "Eazy Store POS",
+			"email": senderEmail,
+		},
+		"to": []map[string]string{
+			{"email": targetEmail},
+		},
+		"subject":     "Eazy Store - ยืนยันรหัสผ่านใหม่",
+		"htmlContent": htmlContent,
+	})
+
+	// ยิง HTTP POST ไปที่ API ของ Brevo (พอร์ต 443 ทะลุ Render สบายๆ)
+	req, err := http.NewRequest("POST", "https://api.brevo.com/v3/smtp/email", bytes.NewBuffer(requestBody))
 	if err != nil {
-		fmt.Println("❌ Error sending email via Resend:", err.Error())
 		return err
 	}
 
-	fmt.Println("✅ ส่ง OTP สำเร็จ! Email ID:", sent.Id)
-	return nil
+	// ใส่ Header ตามที่ Brevo ต้องการ
+	req.Header.Set("accept", "application/json")
+	req.Header.Set("api-key", apiKey)
+	req.Header.Set("content-type", "application/json")
+
+	// สั่งยิง Request
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("❌ Error connecting to Brevo:", err.Error())
+		return err
+	}
+	defer resp.Body.Close()
+
+	// เช็ค Status Code ว่าส่งผ่านไหม (200-299 ถือว่าสำเร็จ)
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		fmt.Println("✅ ส่ง OTP สำเร็จผ่าน Brevo API!")
+		return nil
+	}
+
+	fmt.Printf("❌ Failed to send email, status code: %d\n", resp.StatusCode)
+	return fmt.Errorf("failed to send email, status code: %d", resp.StatusCode)
 }
 
 // RequestResetOTP ฟังก์ชันสำหรับรับเรื่องกู้รหัสผ่าน
