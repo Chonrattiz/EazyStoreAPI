@@ -1,12 +1,10 @@
 package controllers
 
 import (
-	"bytes"
 	"crypto/rand"
-	"encoding/json"
 	"fmt"
 	"math/big"
-	"net/http"
+	"net/smtp"
 	"os"
 	"time"
 
@@ -25,15 +23,23 @@ func GenerateOTP() string {
 	return fmt.Sprintf("%06d", n)
 }
 
-// ✅ SendEmailOTP เปลี่ยนมาใช้ Brevo API แทน Resend
+// ✅ SendEmailOTP เปลี่ยนมาใช้ Gmail SMTP
 func SendEmailOTP(targetEmail string, otpCode string) error {
-	// ดึง API Key ของ Brevo จาก Environment Variable
-	apiKey := os.Getenv("BREVO_API_KEY")
+	// ดึงรหัสผ่าน 16 หลักจาก Environment Variable
+	password := os.Getenv("GMAIL_APP_PASSWORD")
 
-	// ใช้อีเมลที่คุณยืนยันใน Brevo แล้วเป็นผู้ส่ง
-	senderEmail := "eazystorepos.official@gmail.com"
+	// ใช้อีเมลทางการของร้านเป็นตัวส่ง
+	from := "eazystorepos.official@gmail.com"
 
-	// โครงสร้าง HTML เดิม (สวยงามอยู่แล้ว)
+	// ตั้งค่า Server ของ Gmail
+	smtpHost := "smtp.gmail.com"
+	smtpPort := "587"
+
+	// โครงสร้างอีเมล (ใส่ Header ของอีเมลให้ถูกต้อง)
+	subject := "Subject: Eazy Store - ยืนยันรหัสผ่านใหม่\n"
+	mime := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
+
+	// โครงสร้าง HTML เดิมที่สวยงาม
 	htmlContent := fmt.Sprintf(`
 	<html>
 	<body style="font-family: Arial, sans-serif;">
@@ -50,47 +56,21 @@ func SendEmailOTP(targetEmail string, otpCode string) error {
 	</body>
 	</html>`, otpCode)
 
-	// สร้าง JSON Body สำหรับยิง API ของ Brevo
-	requestBody, _ := json.Marshal(map[string]interface{}{
-		"sender": map[string]string{
-			"name":  "Eazy Store POS",
-			"email": senderEmail,
-		},
-		"to": []map[string]string{
-			{"email": targetEmail},
-		},
-		"subject":     "Eazy Store - ยืนยันรหัสผ่านใหม่",
-		"htmlContent": htmlContent,
-	})
+	// นำส่วนประกอบทั้งหมดมารวมกันเป็นก้อนเดียว
+	msg := []byte(subject + mime + htmlContent)
 
-	// ยิง HTTP POST ไปที่ API ของ Brevo (พอร์ต 443 ทะลุ Render สบายๆ)
-	req, err := http.NewRequest("POST", "https://api.brevo.com/v3/smtp/email", bytes.NewBuffer(requestBody))
+	// สร้างการยืนยันตัวตนสำหรับล็อกอินเข้า Gmail
+	auth := smtp.PlainAuth("", from, password, smtpHost)
+
+	// สั่งส่งอีเมลผ่านพอร์ต 587
+	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, []string{targetEmail}, msg)
 	if err != nil {
+		fmt.Println("❌ Error sending email via Gmail SMTP:", err)
 		return err
 	}
 
-	// ใส่ Header ตามที่ Brevo ต้องการ
-	req.Header.Set("accept", "application/json")
-	req.Header.Set("api-key", apiKey)
-	req.Header.Set("content-type", "application/json")
-
-	// สั่งยิง Request
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Println("❌ Error connecting to Brevo:", err.Error())
-		return err
-	}
-	defer resp.Body.Close()
-
-	// เช็ค Status Code ว่าส่งผ่านไหม (200-299 ถือว่าสำเร็จ)
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		fmt.Println("✅ ส่ง OTP สำเร็จผ่าน Brevo API!")
-		return nil
-	}
-
-	fmt.Printf("❌ Failed to send email, status code: %d\n", resp.StatusCode)
-	return fmt.Errorf("failed to send email, status code: %d", resp.StatusCode)
+	fmt.Println("✅ ส่ง OTP สำเร็จผ่าน Gmail SMTP!")
+	return nil
 }
 
 // RequestResetOTP ฟังก์ชันสำหรับรับเรื่องกู้รหัสผ่าน
