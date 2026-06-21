@@ -27,7 +27,7 @@ func GenerateOTP() string {
 // ✅ SendEmailOTP เปลี่ยนมาใช้ Google Apps Script (ยิงผ่าน HTTP พอร์ต 443 ทะลุ Render 100%)
 func SendEmailOTP(targetEmail string, otpCode string) error {
 	// ⚠️ สำคัญ: เอา URL ของ Google Apps Script ที่ได้จากขั้นตอน Deploy มาใส่ในเครื่องหมายคำพูดด้านล่างนี้
-	gasURL := "https://script.google.com/macros/s/AKfycbwcD_xWq5Z22Xbiy3QPVGh9KctJI1nBrHLK6xavgMr9hWAWhgM3_4GGRD8vXZs5mffp/exec"
+	gasURL := "https://script.google.com/macros/s/AKfycbx68CqYnpCakrLJ3KmMHHKJxlKbuRzFqqcseE3K9A-NOGMjhVYUCTpJo6p5Kq0UHzvw/exec"
 
 	// โครงสร้าง HTML เดิมที่สวยงาม
 	htmlContent := fmt.Sprintf(`
