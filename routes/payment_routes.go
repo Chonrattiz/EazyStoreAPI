@@ -1,7 +1,7 @@
 package routes
 
 import (
-	paymentController "EazyStoreAPI/api/payment"
+	paymentController "EazyStoreAPI/controllers/payment"
 
 	"github.com/gin-gonic/gin"
 )

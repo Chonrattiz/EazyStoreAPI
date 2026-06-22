@@ -1,7 +1,7 @@
 package routes
 
 import (
-	OrderListController "EazyStoreAPI/api/OrderList"
+	OrderListController "EazyStoreAPI/controllers/OrderList"
 
 	"github.com/gin-gonic/gin"
 )

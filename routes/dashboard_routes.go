@@ -1,7 +1,7 @@
 package routes
 
 import (
-	dashboadController "EazyStoreAPI/api/dashboad"
+	dashboadController "EazyStoreAPI/controllers/dashboad"
 
 	"github.com/gin-gonic/gin"
 )

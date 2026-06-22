@@ -1,8 +1,8 @@
 package routes
 
 import (
-	resetController "EazyStoreAPI/api/ResetPassword"
-	authController "EazyStoreAPI/api/auth"
+	resetController "EazyStoreAPI/controllers/ResetPassword"
+	authController "EazyStoreAPI/controllers/auth"
 
 	"github.com/gin-gonic/gin"
 )

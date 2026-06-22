@@ -1,1 +1,20 @@
+# Environment variables
 .env
+.env.local
+.env.production
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/vendor/
+
+# Vercel
+.vercel
+
+# Swagger generated (optional, comment out if you want to commit docs)
+# docs/

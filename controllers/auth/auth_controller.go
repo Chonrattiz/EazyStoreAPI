@@ -11,7 +11,7 @@ import (
 	"golang.org/x/crypto/bcrypt" // <--- Import ตัวนี้เพิ่มมา
 
 	// 👇 แก้ Path ให้ตรงกับโฟลเดอร์ในเครื่องของคุณ
-	resetController "EazyStoreAPI/api/ResetPassword"
+	resetController "EazyStoreAPI/controllers/ResetPassword"
 	"EazyStoreAPI/database"
 	"EazyStoreAPI/models"
 )

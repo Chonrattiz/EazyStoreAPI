@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 
-	resetController "EazyStoreAPI/api/ResetPassword"
+	resetController "EazyStoreAPI/controllers/ResetPassword"
 	"EazyStoreAPI/database"
 	"EazyStoreAPI/models"
 )

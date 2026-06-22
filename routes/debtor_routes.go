@@ -1,7 +1,7 @@
 package routes
 
 import (
-	debtorController "EazyStoreAPI/api/debtor"
+	debtorController "EazyStoreAPI/controllers/debtor"
 
 	"github.com/gin-gonic/gin"
 )

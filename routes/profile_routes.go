@@ -1,7 +1,7 @@
 package routes
 
 import (
-	UserController "EazyStoreAPI/api/user" // ไฟล์ที่คุณเก็บ UpdateProfile ไว้
+	UserController "EazyStoreAPI/controllers/user" // ไฟล์ที่คุณเก็บ UpdateProfile ไว้
 
 	"github.com/gin-gonic/gin"
 )
