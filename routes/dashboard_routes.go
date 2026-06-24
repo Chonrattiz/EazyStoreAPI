@@ -12,4 +12,5 @@ func DashboardRoutes(rg *gin.RouterGroup) {
 	rg.GET("/dashboard/transactions", dashboadController.GetTransactionsDetail)
 	rg.GET("/dashboard/product-details", dashboadController.GetProductSalesDetail)
 	rg.GET("/dashboard/advanced-report", dashboadController.GetAdvancedReport)
+	rg.GET("/dashboard/sale-items", dashboadController.GetSaleItems)
 }

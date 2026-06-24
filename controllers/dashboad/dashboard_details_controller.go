@@ -80,3 +80,104 @@ func GetProductSalesDetail(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"product_details": details})
 }
+
+// SaleDetailItem โครงสร้างรายการสินค้าในบิลขาย
+type SaleDetailItem struct {
+	ProductID   int     `json:"product_id"`
+	ProductName string  `json:"product_name"`
+	ImgProduct  string  `json:"img_product"`
+	Qty         int     `json:"qty"`
+	UnitPrice   float64 `json:"unit_price"`
+	CostPrice   float64 `json:"cost_price"`
+	Subtotal    float64 `json:"subtotal"`
+}
+
+// SaleDetailResponse โครงสร้างข้อมูลบิลขายและรายการสินค้าทั้งหมด
+type SaleDetailResponse struct {
+	SaleID        int              `json:"sale_id"`
+	CreatedAt     string           `json:"created_at"`
+	CreatedTime   string           `json:"created_time"`
+	PaymentMethod string           `json:"payment_method"`
+	NetPrice      float64          `json:"net_price"`
+	Pay           float64          `json:"pay"`
+	Change        float64          `json:"change"`
+	Items         []SaleDetailItem `json:"items"`
+}
+
+// GetSaleItems ดึงข้อมูลรายละเอียดบิลและรายการสินค้าในบิลนั้นๆ
+func GetSaleItems(c *gin.Context) {
+	shopID := c.Query("shop_id")
+	saleID := c.Query("sale_id")
+
+	if shopID == "" || saleID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาส่ง shop_id และ sale_id"})
+		return
+	}
+
+	// ดึงข้อมูลหลักของบิลขาย
+	var sale struct {
+		SaleID        int     `gorm:"column:sale_id"`
+		CreatedAt     string  `gorm:"column:created_at"`
+		CreatedTime   *string `gorm:"column:created_time"`
+		PaymentMethod string  `gorm:"column:payment_method"`
+		NetPrice      float64 `gorm:"column:net_price"`
+		Pay           float64 `gorm:"column:pay"`
+	}
+
+	err := database.DB.Table("sales").
+		Select("sale_id, DATE_FORMAT(created_at, '%Y-%m-%d') as created_at, created_time, payment_method, net_price, pay").
+		Where("shop_id = ? AND sale_id = ?", shopID, saleID).
+		First(&sale).Error
+
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลบิลขาย"})
+		return
+	}
+
+	// คำนวณเงินทอนแบบไดนามิก
+	change := sale.Pay - sale.NetPrice
+	if change < 0 {
+		change = 0
+	}
+
+	// ดึงรายละเอียดรายการสินค้าในบิลขาย
+	var items []SaleDetailItem
+	err = database.DB.Table("sale_items").
+		Select(`
+			sale_items.product_id, 
+			products.name as product_name, 
+			products.img_product, 
+			sale_items.amount as qty, 
+			sale_items.price_per_unit as unit_price, 
+			products.cost_price as cost_price, 
+			sale_items.total_price as subtotal
+		`).
+		Joins("LEFT JOIN products ON products.product_id = sale_items.product_id").
+		Where("sale_items.sale_id = ?", sale.SaleID).
+		Scan(&items).Error
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลรายการสินค้าได้"})
+		return
+	}
+
+	createdTimeStr := ""
+	if sale.CreatedTime != nil {
+		createdTimeStr = *sale.CreatedTime
+	}
+
+	// จัดรูป Response ส่งกลับไปยัง Flutter
+	response := SaleDetailResponse{
+		SaleID:        sale.SaleID,
+		CreatedAt:     sale.CreatedAt,
+		CreatedTime:   createdTimeStr,
+		PaymentMethod: sale.PaymentMethod,
+		NetPrice:      sale.NetPrice,
+		Pay:           sale.Pay,
+		Change:        change,
+		Items:         items,
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
