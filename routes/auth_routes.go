@@ -12,6 +12,8 @@ func AuthRoutes(rg *gin.RouterGroup) {
 	rg.POST("/login", authController.Login)
 	rg.POST("/verify-registration", authController.VerifyRegistration)
 	rg.POST("/change-email-verify", authController.ChangeEmailBeforeVerify)
+	rg.POST("/refresh", authController.Refresh)
+	rg.POST("/logout", authController.Logout)
 
 	// กู้รหัสผ่าน
 	rg.POST("/request-reset", resetController.RequestResetOTP)

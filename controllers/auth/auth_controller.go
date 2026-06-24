@@ -206,31 +206,223 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// 5. สร้าง JWT Token (มีอายุ 3 นาที)
-	claims := jwt.MapClaims{
+	// 5. สร้าง Access Token (อายุ 15 นาที)
+	accessTokenExpiry := time.Now().Add(15 * time.Minute)
+	accessClaims := jwt.MapClaims{
 		"user_id":  user.UserID,
 		"username": user.Username,
-		"exp":      time.Now().Add(3 * time.Minute).Unix(),
+		"type":     "access",
+		"exp":      accessTokenExpiry.Unix(),
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
 	secretKey := os.Getenv("JWT_SECRET")
 
-	tokenString, err := token.SignedString([]byte(secretKey))
+	accessTokenString, err := accessToken.SignedString([]byte(secretKey))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างรหัสการเข้าถึงได้"})
 		return
 	}
 
-	// 6. ส่งข้อมูลกลับเมื่อ Login สำเร็จ
+	// 6. สร้าง Refresh Token (อายุ 7 วัน)
+	refreshTokenExpiry := time.Now().Add(7 * 24 * time.Hour)
+	refreshClaims := jwt.MapClaims{
+		"user_id": user.UserID,
+		"type":    "refresh",
+		"exp":     refreshTokenExpiry.Unix(),
+	}
+
+	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
+	refreshTokenString, err := refreshToken.SignedString([]byte(secretKey))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้าง refresh token ได้"})
+		return
+	}
+
+	// 7. เก็บ Refresh Token ในฐานข้อมูล
+	refreshTokenRecord := models.RefreshToken{
+		UserID:    user.UserID,
+		Token:     refreshTokenString,
+		ExpiresAt: refreshTokenExpiry,
+	}
+	if err := database.DB.Create(&refreshTokenRecord).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึก token ได้"})
+		return
+	}
+
+	// 8. ส่งข้อมูลกลับเมื่อ Login สำเร็จ
 	c.JSON(http.StatusOK, gin.H{
 		"message": "เข้าสู่ระบบสำเร็จ",
-		"token":   tokenString,
+		"access_token":  accessTokenString,
+		"refresh_token": refreshTokenString,
+		"expires_in":    900, // 15 นาทีเป็นวินาที
 		"user": gin.H{
 			"id":       user.UserID,
 			"username": user.Username,
 			"email":    user.Email,
 			"phone":    user.Phone,
 		},
+	})
+}
+
+// ============================================================
+// Refresh Token - ใช้เมื่อ Access Token หมดอายุ
+// ============================================================
+// @Summary      รีเฟรช Access Token
+// @Description  ใช้ Refresh Token เพื่อขอ Access Token ใหม่
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        request body map[string]string true "Refresh Token"
+// @Success      200 {object} map[string]interface{}
+// @Router       /api/auth/refresh [post]
+func Refresh(c *gin.Context) {
+	var input struct {
+		RefreshToken string `json:"refresh_token" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาส่ง refresh_token"})
+		return
+	}
+
+	// 1. ตรวจสอบ Refresh Token ว่า valid หรือไม่
+	secretKey := os.Getenv("JWT_SECRET")
+	claims := jwt.MapClaims{}
+	token, err := jwt.ParseWithClaims(input.RefreshToken, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(secretKey), nil
+	})
+
+	if err != nil || !token.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token ไม่ถูกต้อง"})
+		return
+	}
+
+	// 2. ตรวจสอบว่า token type เป็น refresh
+	tokenType, ok := claims["type"].(string)
+	if !ok || tokenType != "refresh" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token type ไม่ถูกต้อง"})
+		return
+	}
+
+	// 3. ดึง user_id จาก claims
+	userIDFloat, ok := claims["user_id"].(float64)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบ user_id ใน token"})
+		return
+	}
+	userID := uint(userIDFloat)
+
+	// 4. ตรวจสอบว่า refresh token ยังเก็บไว้ในฐานข้อมูลและยังไม่โดนยกเลิก
+	var refreshTokenRecord models.RefreshToken
+	result := database.DB.Where("user_id = ? AND token = ? AND revoked_at IS NULL", userID, input.RefreshToken).First(&refreshTokenRecord)
+	if result.Error != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token ไม่พบหรือโดนยกเลิกแล้ว"})
+		return
+	}
+
+	// 5. ตรวจสอบว่า refresh token ยังไม่หมดอายุ
+	if time.Now().After(refreshTokenRecord.ExpiresAt) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token หมดอายุแล้ว"})
+		return
+	}
+
+	// 6. ดึงข้อมูล User
+	var user models.User
+	if err := database.DB.Where("user_id = ?", userID).First(&user).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบผู้ใช้"})
+		return
+	}
+
+	// 7. สร้าง Access Token ใหม่
+	accessTokenExpiry := time.Now().Add(15 * time.Minute)
+	accessClaims := jwt.MapClaims{
+		"user_id":  user.UserID,
+		"username": user.Username,
+		"type":     "access",
+		"exp":      accessTokenExpiry.Unix(),
+	}
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
+	accessTokenString, err := accessToken.SignedString([]byte(secretKey))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้าง access token ได้"})
+		return
+	}
+
+	// 8. ส่ง Access Token ใหม่ตอบกลับ
+	c.JSON(http.StatusOK, gin.H{
+		"message":      "รีเฟรช Access Token สำเร็จ",
+		"access_token": accessTokenString,
+		"expires_in":   900, // 15 นาทีเป็นวินาที
+	})
+}
+
+// ============================================================
+// Logout - ยกเลิก Refresh Token
+// ============================================================
+// @Summary      ออกจากระบบ (Logout)
+// @Description  ยกเลิก Refresh Token ของผู้ใช้
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        Authorization header string true "Bearer Access Token"
+// @Success      200 {object} map[string]string
+// @Router       /api/auth/logout [post]
+func Logout(c *gin.Context) {
+	// 1. ดึง Access Token จาก header
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่พบ Authorization header"})
+		return
+	}
+
+	// 2. ดึง token จาก "Bearer <token>"
+	var accessTokenString string
+	_, err := fmt.Sscanf(authHeader, "Bearer %s", &accessTokenString)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Authorization header ไม่ถูกต้อง"})
+		return
+	}
+
+	// 3. Verify access token และดึง user_id
+	secretKey := os.Getenv("JWT_SECRET")
+	claims := jwt.MapClaims{}
+	token, err := jwt.ParseWithClaims(accessTokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(secretKey), nil
+	})
+
+	if err != nil || !token.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Access token ไม่ถูกต้อง"})
+		return
+	}
+
+	// 4. ตรวจสอบว่า token type เป็น access
+	tokenType, ok := claims["type"].(string)
+	if !ok || tokenType != "access" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token type ไม่ถูกต้อง"})
+		return
+	}
+
+	// 5. ดึง user_id
+	userIDFloat, ok := claims["user_id"].(float64)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบ user_id ใน token"})
+		return
+	}
+	userID := uint(userIDFloat)
+
+	// 6. ยกเลิกทั้งหมด refresh token ของผู้ใช้นี้ (logout ทุกอุปกรณ์)
+	// หรือถ้าต้องการ logout เฉพาะอุปกรณ์นี้ สามารถเพิ่มเงื่อนไข device_id ได้
+	now := time.Now()
+	if err := database.DB.Model(&models.RefreshToken{}).
+		Where("user_id = ? AND revoked_at IS NULL", userID).
+		Update("revoked_at", now).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถออกจากระบบได้"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "ออกจากระบบสำเร็จ",
 	})
 }

@@ -28,6 +28,7 @@ func SetupDatabaseConnection() {
     // AutoMigrate: เช็คว่า Struct ใน Go ตรงกับ Table ใน MySQL ไหม
     // ถ้ายังไม่มีตาราง users ระบบจะสร้างให้ (แต่เราสร้างไว้แล้ว มันจะแค่เช็คเฉยๆ)
     database.AutoMigrate(&models.User{})
+    database.AutoMigrate(&models.RefreshToken{})
 
     DB = database
 }
