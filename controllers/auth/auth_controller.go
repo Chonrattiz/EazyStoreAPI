@@ -206,11 +206,11 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// 5. สร้าง JWT Token (มีอายุ 24 ชั่วโมง)
+	// 5. สร้าง JWT Token (มีอายุ 3 นาที)
 	claims := jwt.MapClaims{
 		"user_id":  user.UserID,
 		"username": user.Username,
-		"exp":      time.Now().Add(time.Hour * 24).Unix(),
+		"exp":      time.Now().Add(3 * time.Minute).Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

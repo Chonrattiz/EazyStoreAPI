@@ -18,3 +18,5 @@
 
 # Swagger generated (optional, comment out if you want to commit docs)
 # docs/
+
+.vercel
