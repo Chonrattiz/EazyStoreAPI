@@ -252,7 +252,7 @@ func Login(c *gin.Context) {
 
 	// 8. ส่งข้อมูลกลับเมื่อ Login สำเร็จ
 	c.JSON(http.StatusOK, gin.H{
-		"message": "เข้าสู่ระบบสำเร็จ",
+		"message":       "เข้าสู่ระบบสำเร็จ",
 		"access_token":  accessTokenString,
 		"refresh_token": refreshTokenString,
 		"expires_in":    900, // 15 นาทีเป็นวินาที
@@ -335,7 +335,7 @@ func Refresh(c *gin.Context) {
 	}
 
 	// 7. สร้าง Access Token ใหม่
-	accessTokenExpiry := time.Now().Add(15 * time.Minute)
+	accessTokenExpiry := time.Now().Add(1 * time.Minute)
 	accessClaims := jwt.MapClaims{
 		"user_id":  user.UserID,
 		"username": user.Username,
@@ -355,6 +355,7 @@ func Refresh(c *gin.Context) {
 		"message":      "รีเฟรช Access Token สำเร็จ",
 		"access_token": accessTokenString,
 		"expires_in":   900, // 15 นาทีเป็นวินาที
+
 	})
 }
 
