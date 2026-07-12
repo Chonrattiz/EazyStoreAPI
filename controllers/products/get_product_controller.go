@@ -5,12 +5,35 @@ import (
 
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 
 	"EazyStoreAPI/models"
 
 	"github.com/gin-gonic/gin"
 )
+
+// thaiSortKey สลับตำแหน่งสระนำ (เ แ โ ใ ไ) กับตัวพยัญชนะถัดไป เพราะ MySQL
+// (utf8mb4) ไม่มี collation ภาษาไทยที่เรียงตามพจนานุกรมจริง การ ORDER BY name
+// ตรงๆ จะเรียงตาม code point ทำให้คำที่ขึ้นต้นด้วยสระนำเหล่านี้ไปอยู่ท้ายสุด
+// เสมอ ทั้งที่ควรเรียงถัดจากพยัญชนะที่ตามมา (เช่น "เครื่องดื่ม" ควรอยู่แถว ค)
+func thaiSortKey(input string) string {
+	leadingVowels := map[rune]bool{'เ': true, 'แ': true, 'โ': true, 'ใ': true, 'ไ': true}
+	runes := []rune(input)
+	var sb strings.Builder
+	for i := 0; i < len(runes); i++ {
+		ch := runes[i]
+		if leadingVowels[ch] && i+1 < len(runes) {
+			sb.WriteRune(runes[i+1])
+			sb.WriteRune(ch)
+			i++
+		} else {
+			sb.WriteRune(ch)
+		}
+	}
+	return sb.String()
+}
 
 // GetCategories ดึงรายการหมวดหมู่ทั้งหมดจากฐานข้อมูล
 func GetCategories(c *gin.Context) {
@@ -76,20 +99,46 @@ func GetProductsByShop(c *gin.Context) {
 	query.Count(&totalItems)
 
 	// 5. ✨ Logic การเรียงลำดับ: ต้องเรียง "ก่อน" ทำ Limit/Offset
-	// ถ้า App ส่ง sort=asc มา ให้เรียงสต็อกน้อยไปมาก
-	// ถ้า App ส่ง sort=desc มา ให้เรียงสต็อกมากไปน้อย
-	orderQuery := "stock DESC"
-	if sortOrder == "asc" {
-		orderQuery = "stock ASC"
-	}
-
-	// 6. Pagination
+	// รองรับ name_asc / name_desc / stock_asc / stock_desc (รูปแบบที่ App ส่งมาปัจจุบัน)
+	// และคง asc/desc แบบเดิมไว้เพื่อ backward compatibility (หมายถึงสต็อก)
 	offset := (page - 1) * limit
-	result := query.Order(orderQuery).Limit(limit).Offset(offset).Find(&products)
 
-	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลสินค้าได้"})
-		return
+	switch sortOrder {
+	case "name_asc", "name_desc":
+		// MySQL (utf8mb4) ไม่มี collation ภาษาไทยที่เรียงตามพจนานุกรมจริง
+		// ORDER BY name ตรงๆ จะเรียงผิด จึงต้องดึงข้อมูลที่ผ่าน filter มา
+		// ทั้งหมดก่อน แล้วเรียงเองด้วย thaiSortKey จากนั้นค่อยตัดหน้าด้วยมือ
+		// เพื่อให้ผลลัพธ์เรียงถูกต่อเนื่องกันทุกหน้า ไม่ใช่แค่ในหน้าเดียว
+		if err := query.Find(&products).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลสินค้าได้"})
+			return
+		}
+		sort.SliceStable(products, func(i, j int) bool {
+			ki, kj := thaiSortKey(products[i].Name), thaiSortKey(products[j].Name)
+			if sortOrder == "name_desc" {
+				return kj < ki
+			}
+			return ki < kj
+		})
+		start := offset
+		if start > len(products) {
+			start = len(products)
+		}
+		end := start + limit
+		if end > len(products) {
+			end = len(products)
+		}
+		products = products[start:end]
+	case "stock_asc", "asc":
+		if err := query.Order("stock ASC").Limit(limit).Offset(offset).Find(&products).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลสินค้าได้"})
+			return
+		}
+	default: // "stock_desc", "desc" หรือค่าอื่นที่ไม่รู้จัก
+		if err := query.Order("stock DESC").Limit(limit).Offset(offset).Find(&products).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลสินค้าได้"})
+			return
+		}
 	}
 
 	totalPages := int(math.Ceil(float64(totalItems) / float64(limit)))
