@@ -1,11 +1,14 @@
 package controllers
 
 import (
+	"EazyStoreAPI/assets"
 	"EazyStoreAPI/database"
 	"EazyStoreAPI/models"
 	"bytes"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -40,10 +43,23 @@ func ExportOrderPDF(c *gin.Context) {
 	// 2. เริ่มสร้าง PDF
 	pdf := gofpdf.New("P", "mm", "A4", "")
 
-	// --- 🟢 แก้ไขจุดที่ 1: ตรวจสอบชื่อไฟล์ให้ตรงกับที่ปรากฏใน Folder (ตัวพิมพ์ใหญ่ทั้งหมด) ---
-	//
-	pdf.AddUTF8Font("THSarabun", "", "assets/fonts/THSARABUNNEW.TTF")
-	pdf.AddUTF8Font("THSarabun", "B", "assets/fonts/THSARABUNNEW BOLD.TTF")
+	// --- 🟢 แก้ไขจุดที่ 1: ดึงฟอนต์จาก embed.FS แล้วบันทึกไปที่ temp dir เพื่อหลีกเลี่ยงปัญหาไฟล์หายใน Vercel ---
+	regularFontPath, err := getFontPath("THSARABUNNEW.TTF")
+	if err != nil {
+		fmt.Println("❌ Error loading regular font:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load regular font: " + err.Error()})
+		return
+	}
+
+	boldFontPath, err := getFontPath("THSARABUNNEW BOLD.TTF")
+	if err != nil {
+		fmt.Println("❌ Error loading bold font:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load bold font: " + err.Error()})
+		return
+	}
+
+	pdf.AddUTF8Font("THSarabun", "", regularFontPath)
+	pdf.AddUTF8Font("THSarabun", "B", boldFontPath)
 
 	pdf.AddPage()
 	pdf.SetMargins(15, 15, 15)
@@ -117,4 +133,28 @@ func ExportOrderPDF(c *gin.Context) {
 	c.Header("Content-Length", fmt.Sprintf("%d", buf.Len()))
 
 	c.Data(http.StatusOK, "application/pdf", buf.Bytes())
+}
+
+func getFontPath(filename string) (string, error) {
+	tempDir := os.TempDir()
+	targetPath := filepath.Join(tempDir, filename)
+
+	// ตรวจสอบว่าไฟล์ถูกเขียนไปแล้วหรือยัง
+	if _, err := os.Stat(targetPath); err == nil {
+		return targetPath, nil
+	}
+
+	// อ่านไฟล์จาก embedded FS
+	data, err := assets.FontsFS.ReadFile("fonts/" + filename)
+	if err != nil {
+		return "", err
+	}
+
+	// เขียนไฟล์ลง temp dir
+	err = os.WriteFile(targetPath, data, 0644)
+	if err != nil {
+		return "", err
+	}
+
+	return targetPath, nil
 }
