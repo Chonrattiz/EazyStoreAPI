@@ -17,8 +17,11 @@ func ProductRoutes(rg *gin.RouterGroup) {
 	rg.GET("/products/null-barcode", productController.GetNullBarcode) // หาสินค้าไม่มีบาร์โค้ด
 
 	// หมวดหมู่
+	rg.GET("/categories/inactive", productController.GetInactiveCategories)
 	rg.GET("/categories", productController.GetCategories)
 	rg.POST("/categories", productController.CreateCategory)
+	rg.PUT("/categories/:id/restore", productController.RestoreCategory)
+	rg.PUT("/categories/:id/move-products", productController.MoveCategoryProducts)
 	rg.PUT("/categories/:id", productController.UpdateCategory)
 	rg.DELETE("/categories/:id", productController.DeleteCategory)
 }

@@ -18,6 +18,16 @@ type UpdateCategoryInput struct {
 	Name   string `json:"name" binding:"required"`
 }
 
+type RestoreCategoryInput struct {
+	ShopID int `json:"shop_id" binding:"required"`
+}
+
+type MoveCategoryProductsInput struct {
+	ShopID           int   `json:"shop_id" binding:"required"`
+	TargetCategoryID int   `json:"target_category_id" binding:"required"`
+	ProductIDs       []int `json:"product_ids"`
+}
+
 // TableName กำหนดชื่อตารางให้ตรงกับในฐานข้อมูล (ตามรูป DBeaver)
 func (Category) TableName() string {
 	return "category"
