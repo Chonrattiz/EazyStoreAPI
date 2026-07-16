@@ -4,20 +4,22 @@ import "time"
 
 // User struct นี้แมพกับตาราง "users" ใน MySQL db66011212083
 type User struct {
-    // ใช้ `gorm:"column:..."` เพื่อระบุชื่อ field ใน DB ให้ตรงเป๊ะ
-    UserID    uint      `gorm:"primaryKey;autoIncrement;column:user_id" json:"user_id"`
-    Username  string    `gorm:"column:username;not null" json:"username"`
-    Password  string    `gorm:"column:password;not null" json:"password"`
-    Phone     string    `gorm:"column:phone;unique;not null;size:10" json:"phone"`
-    Email     string    `gorm:"unique;not null"` 
-    CreatedAt time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
-    IsVerified bool   `gorm:"default:false" json:"is_verified"` // ✨ เพิ่มฟิลด์นี้
+	// ใช้ `gorm:"column:..."` เพื่อระบุชื่อ field ใน DB ให้ตรงเป๊ะ
+	UserID     uint      `gorm:"primaryKey;autoIncrement;column:user_id" json:"user_id"`
+	Username   string    `gorm:"column:username;not null" json:"username"`
+	Password   string    `gorm:"column:password;not null" json:"password"`
+	Phone      string    `gorm:"column:phone;unique;not null;size:10" json:"phone"`
+	Email      string    `gorm:"unique;not null"`
+	ShopID     int       `gorm:"column:shop_id;not null" json:"shop_id"` // ✨ ผูกกับร้านค้า
+	CreatedAt  time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	IsVerified bool      `gorm:"default:false" json:"is_verified"` // ✨ เพิ่มฟิลด์นี้
 }
+
 // โครงสร้างสำหรับยืนยันอีเมลตอนสมัคร
 type EmailVerification struct {
-    Email     string    `gorm:"primaryKey;type:varchar(100)"`
-    OTPCode   string    `gorm:"not null"`
-    ExpiresAt time.Time `gorm:"not null"`
+	Email     string    `gorm:"primaryKey;type:varchar(100)"`
+	OTPCode   string    `gorm:"not null"`
+	ExpiresAt time.Time `gorm:"not null"`
 }
 
 // ฟังก์ชันนี้บอก GORM ว่า struct นี้คู่กับตารางชื่อ "users"
@@ -38,6 +40,3 @@ type LoginInput struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
-
-
-

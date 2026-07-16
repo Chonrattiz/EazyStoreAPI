@@ -18,4 +18,7 @@ func ProductRoutes(rg *gin.RouterGroup) {
 
 	// หมวดหมู่
 	rg.GET("/categories", productController.GetCategories)
+	rg.POST("/categories", productController.CreateCategory)
+	rg.PUT("/categories/:id", productController.UpdateCategory)
+	rg.DELETE("/categories/:id", productController.DeleteCategory)
 }

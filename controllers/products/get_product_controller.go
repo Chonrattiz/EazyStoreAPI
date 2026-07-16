@@ -35,12 +35,22 @@ func thaiSortKey(input string) string {
 	return sb.String()
 }
 
-// GetCategories ดึงรายการหมวดหมู่ทั้งหมดจากฐานข้อมูล
+// GetCategories ดึงหมวดหมู่ของร้านที่ระบุ (ต้องส่ง shop_id มา)
 func GetCategories(c *gin.Context) {
+	shopIDStr := c.Query("shop_id")
+	if shopIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ shop_id"})
+		return
+	}
+	shopID, err := strconv.Atoi(shopIDStr)
+	if err != nil || shopID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "shop_id ไม่ถูกต้อง"})
+		return
+	}
+
 	var categories []models.Category
 
-	// ดึงข้อมูลทั้งหมดจากตาราง category
-	if err := database.DB.Order("category_id ASC").Find(&categories).Error; err != nil {
+	if err := database.DB.Where("shop_id = ? AND status = ?", shopID, true).Order("category_id ASC").Find(&categories).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลหมวดหมู่ได้: " + err.Error()})
 		return
 	}
