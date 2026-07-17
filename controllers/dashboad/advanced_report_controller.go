@@ -134,19 +134,57 @@ func GetAdvancedReport(c *gin.Context) {
 		Scan(&debtSummary.CollectedThisMonth)
 
 	// 5. Aging Report (from sales that are unpaid)
+	// Remaining balance per sale is derived with a FIFO waterfall: debt_payments are
+	// recorded per-debtor (not per-sale), so total payments are applied against a
+	// debtor's oldest sales first via a running cumulative-debt window function.
+	// This keeps aging amounts in sync when a debtor pays off older debts later,
+	// instead of relying on the never-updated sales.pay column.
+	//
+	// Aging is computed "as of" the selected period's end_date, not CURDATE() —
+	// standard AR-aging convention (e.g. "aging as of 7/31/2026"). This lets the
+	// month/year picker on the report page move the aging snapshot too: browsing a
+	// past period shows aging as it stood then (sales/payments after end_date are
+	// excluded), and browsing a future period projects aging forward assuming no
+	// further payment happens before then (there simply are no future payments yet).
 	var aging struct {
 		Safe    float64 `json:"safe"`    // 1-15 days
 		Warning float64 `json:"warning"` // 16-30 days
 		Danger  float64 `json:"danger"`  // >30 days
 	}
-	database.DB.Table("sales").
-		Select(`
-			COALESCE(SUM(CASE WHEN DATEDIFF(CURDATE(), created_at) <= 15 THEN net_price - pay ELSE 0 END), 0) as safe,
-			COALESCE(SUM(CASE WHEN DATEDIFF(CURDATE(), created_at) BETWEEN 16 AND 30 THEN net_price - pay ELSE 0 END), 0) as warning,
-			COALESCE(SUM(CASE WHEN DATEDIFF(CURDATE(), created_at) > 30 THEN net_price - pay ELSE 0 END), 0) as danger
-		`).
-		Where("shop_id = ? AND (pay < net_price OR payment_method = 'ค้างชำระ')", shopID).
-		Scan(&aging)
+	database.DB.Raw(`
+		WITH sale_debts AS (
+			SELECT
+				s.sale_id, s.debtor_id, s.created_at,
+				(s.net_price - s.pay) AS original_debt,
+				SUM(s.net_price - s.pay) OVER (
+					PARTITION BY s.debtor_id ORDER BY s.created_at, s.sale_id
+				) AS cumulative_debt
+			FROM sales s
+			WHERE s.shop_id = ?
+				AND s.debtor_id IS NOT NULL
+				AND s.created_at <= ?
+				AND (s.pay < s.net_price OR s.payment_method = 'ค้างชำระ')
+		),
+		debtor_paid AS (
+			SELECT dp.debtor_id, SUM(dp.amount_paid) AS total_paid
+			FROM debt_payments dp
+			JOIN debtors d ON d.debtor_id = dp.debtor_id
+			WHERE d.shop_id = ? AND dp.payment_date <= ?
+			GROUP BY dp.debtor_id
+		),
+		remaining_per_sale AS (
+			SELECT
+				sd.created_at,
+				GREATEST(0, LEAST(sd.original_debt, sd.cumulative_debt - COALESCE(p.total_paid, 0))) AS remaining
+			FROM sale_debts sd
+			LEFT JOIN debtor_paid p ON p.debtor_id = sd.debtor_id
+		)
+		SELECT
+			COALESCE(SUM(CASE WHEN DATEDIFF(?, created_at) <= 15 THEN remaining ELSE 0 END), 0) as safe,
+			COALESCE(SUM(CASE WHEN DATEDIFF(?, created_at) BETWEEN 16 AND 30 THEN remaining ELSE 0 END), 0) as warning,
+			COALESCE(SUM(CASE WHEN DATEDIFF(?, created_at) > 30 THEN remaining ELSE 0 END), 0) as danger
+		FROM remaining_per_sale
+	`, shopID, endDate, shopID, endDate, endDate, endDate, endDate).Scan(&aging)
 
 	// 6. Top 5 Debtors
 	type TopDebtor struct {
@@ -188,5 +226,99 @@ func GetAdvancedReport(c *gin.Context) {
 		"aging_report":    aging,
 		"top_debtors":     topDebtors,
 		"debt_collection": debtCollection,
+	})
+}
+
+// GetAgingReportDetail returns the individual bills behind each aging bucket
+// (safe/warning/danger) shown in GetAdvancedReport's "aging_report" totals, so
+// the UI can drill into "who owes what" per bucket. Reuses the exact same
+// FIFO-waterfall remaining-balance logic (sale_debts/debtor_paid/remaining_per_sale)
+// so SUM(amount_owed) per bucket here reconciles with aging_report.safe/warning/danger.
+func GetAgingReportDetail(c *gin.Context) {
+	shopID := c.Query("shop_id")
+	endDate := c.Query("end_date")
+
+	if shopID == "" || endDate == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาส่ง shop_id และ end_date ให้ครบถ้วน"})
+		return
+	}
+
+	type AgingBill struct {
+		SaleID      int     `json:"sale_id"`
+		DebtorID    int     `json:"debtor_id"`
+		Name        string  `json:"name"`
+		Phone       string  `json:"phone"`
+		ImgDebtor   string  `json:"img_debtor"`
+		SaleDate    string  `json:"sale_date"`
+		AmountOwed  float64 `json:"amount_owed"`
+		DaysOverdue int     `json:"days_overdue"`
+		Bucket      string  `json:"-"`
+	}
+
+	var bills []AgingBill
+	database.DB.Raw(`
+		WITH sale_debts AS (
+			SELECT
+				s.sale_id, s.debtor_id, s.created_at,
+				(s.net_price - s.pay) AS original_debt,
+				SUM(s.net_price - s.pay) OVER (
+					PARTITION BY s.debtor_id ORDER BY s.created_at, s.sale_id
+				) AS cumulative_debt
+			FROM sales s
+			WHERE s.shop_id = ?
+				AND s.debtor_id IS NOT NULL
+				AND s.created_at <= ?
+				AND (s.pay < s.net_price OR s.payment_method = 'ค้างชำระ')
+		),
+		debtor_paid AS (
+			SELECT dp.debtor_id, SUM(dp.amount_paid) AS total_paid
+			FROM debt_payments dp
+			JOIN debtors d ON d.debtor_id = dp.debtor_id
+			WHERE d.shop_id = ? AND dp.payment_date <= ?
+			GROUP BY dp.debtor_id
+		),
+		remaining_per_sale AS (
+			SELECT
+				sd.sale_id, sd.debtor_id, sd.created_at,
+				GREATEST(0, LEAST(sd.original_debt, sd.cumulative_debt - COALESCE(p.total_paid, 0))) AS remaining
+			FROM sale_debts sd
+			LEFT JOIN debtor_paid p ON p.debtor_id = sd.debtor_id
+		)
+		SELECT
+			r.sale_id, r.debtor_id, d.name, d.phone, d.img_debtor,
+			r.created_at AS sale_date,
+			r.remaining AS amount_owed,
+			DATEDIFF(?, r.created_at) AS days_overdue,
+			CASE
+				WHEN DATEDIFF(?, r.created_at) <= 15 THEN 'safe'
+				WHEN DATEDIFF(?, r.created_at) BETWEEN 16 AND 30 THEN 'warning'
+				ELSE 'danger'
+			END AS bucket
+		FROM remaining_per_sale r
+		JOIN debtors d ON d.debtor_id = r.debtor_id
+		WHERE r.remaining > 0
+		ORDER BY days_overdue DESC, d.name
+	`, shopID, endDate, shopID, endDate, endDate, endDate, endDate).Scan(&bills)
+
+	safe := []AgingBill{}
+	warning := []AgingBill{}
+	danger := []AgingBill{}
+	for _, b := range bills {
+		switch b.Bucket {
+		case "safe":
+			safe = append(safe, b)
+		case "warning":
+			warning = append(warning, b)
+		default:
+			danger = append(danger, b)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"aging_report_detail": gin.H{
+			"safe":    safe,
+			"warning": warning,
+			"danger":  danger,
+		},
 	})
 }
