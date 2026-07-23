@@ -60,19 +60,22 @@ func GetProductSalesDetail(c *gin.Context) {
 		return
 	}
 
+	// total_qty คูณด้วย conversion_qty เพื่อนับเป็นหน่วยฐานเสมอ (นับรวมกันได้ข้ามหน่วย)
+	// ต้นทุน unit-aware เหมือนกับ GetSalesSummary — บิลเก่า (conversion_qty=1) ได้สูตรเดิมเป๊ะ
 	var details []ProductSalesDetail
 	database.DB.Table("sale_items").
 		Select(`
-			products.product_id, 
-			products.name as product_name, 
+			products.product_id,
+			products.name as product_name,
 			products.img_product,
-			SUM(sale_items.amount) as total_qty, 
-			SUM(sale_items.total_price) as total_sales, 
-			SUM(sale_items.amount * products.cost_price) as total_cost,
-			SUM(sale_items.total_price) - SUM(sale_items.amount * products.cost_price) as profit
+			SUM(sale_items.amount * sale_items.conversion_qty) as total_qty,
+			SUM(sale_items.total_price) as total_sales,
+			SUM(sale_items.amount * COALESCE(pu.cost_price, sale_items.conversion_qty * products.cost_price)) as total_cost,
+			SUM(sale_items.total_price) - SUM(sale_items.amount * COALESCE(pu.cost_price, sale_items.conversion_qty * products.cost_price)) as profit
 		`).
 		Joins("JOIN sales ON sales.sale_id = sale_items.sale_id").
 		Joins("JOIN products ON products.product_id = sale_items.product_id").
+		Joins("LEFT JOIN product_units pu ON pu.product_unit_id = sale_items.product_unit_id").
 		Where("sales.shop_id = ? AND sales.created_at >= ? AND sales.created_at <= ?", shopID, startDate, endDate).
 		Group("products.product_id, products.name, products.img_product").
 		Order("total_sales DESC").
@@ -90,6 +93,11 @@ type SaleDetailItem struct {
 	UnitPrice   float64 `json:"unit_price"`
 	CostPrice   float64 `json:"cost_price"`
 	Subtotal    float64 `json:"subtotal"`
+
+	// หน่วยที่ขายจริงตอนนั้น (snapshot) — บิลเก่าที่ไม่มี unit_name จะ fallback เป็น
+	// หน่วยฐานปัจจุบันของสินค้าให้อัตโนมัติ (ดู COALESCE ใน query ด้านล่าง)
+	UnitName      string `json:"unit_name"`
+	ConversionQty int    `json:"conversion_qty"`
 }
 
 // SaleDetailResponse โครงสร้างข้อมูลบิลขายและรายการสินค้าทั้งหมด
@@ -144,15 +152,18 @@ func GetSaleItems(c *gin.Context) {
 	var items []SaleDetailItem
 	err = database.DB.Table("sale_items").
 		Select(`
-			sale_items.product_id, 
-			products.name as product_name, 
-			products.img_product, 
-			sale_items.amount as qty, 
-			sale_items.price_per_unit as unit_price, 
-			products.cost_price as cost_price, 
-			sale_items.total_price as subtotal
+			sale_items.product_id,
+			products.name as product_name,
+			products.img_product,
+			sale_items.amount as qty,
+			sale_items.price_per_unit as unit_price,
+			COALESCE(pu.cost_price, sale_items.conversion_qty * products.cost_price) as cost_price,
+			sale_items.total_price as subtotal,
+			COALESCE(sale_items.unit_name, products.unit) as unit_name,
+			sale_items.conversion_qty as conversion_qty
 		`).
 		Joins("LEFT JOIN products ON products.product_id = sale_items.product_id").
+		Joins("LEFT JOIN product_units pu ON pu.product_unit_id = sale_items.product_unit_id").
 		Where("sale_items.sale_id = ?", sale.SaleID).
 		Scan(&items).Error
 

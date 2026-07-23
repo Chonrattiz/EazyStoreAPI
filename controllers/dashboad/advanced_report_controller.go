@@ -106,7 +106,7 @@ func GetAdvancedReport(c *gin.Context) {
 	}
 	var topProducts []TopProduct
 	database.DB.Table("sale_items").
-		Select("products.name as product_name, SUM(sale_items.amount) as total_qty, SUM(sale_items.total_price) as total_sales").
+		Select("products.name as product_name, SUM(sale_items.amount * sale_items.conversion_qty) as total_qty, SUM(sale_items.total_price) as total_sales").
 		Joins("JOIN sales ON sales.sale_id = sale_items.sale_id").
 		Joins("JOIN products ON products.product_id = sale_items.product_id").
 		Where("sales.shop_id = ? AND sales.created_at >= ? AND sales.created_at <= ?", shopID, startDate, endDate).

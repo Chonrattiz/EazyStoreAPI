@@ -16,9 +16,17 @@ type Product struct {
 	Stock      int     `json:"stock" binding:"gte=0" example:"100"` // gte=0 คือ มากกว่าหรือเท่ากับ 0
 	Unit       string  `json:"unit" binding:"required" example:"ขวด"`
 	Status     bool    `json:"status" example:"true"`
+
+	// Units คือหน่วยขายเพิ่มเติม (ลัง/แพ็ค) ของสินค้านี้ — ไม่บังคับมี
+	Units []ProductUnit `json:"units" gorm:"foreignKey:ProductID;references:ProductID"`
+
+	// MatchedUnit ใช้ตอนค้นหาด้วยบาร์โค้ดของหน่วยขาย (ไม่ใช่บาร์โค้ดหลักของสินค้า)
+	// ไม่ใช่คอลัมน์จริงในตาราง products (gorm:"-")
+	MatchedUnit *ProductUnit `json:"matched_unit,omitempty" gorm:"-"`
 }
 
 type UpdateStockRequest struct {
-	ProductID int `json:"product_id" binding:"required"`
-	Stock     int `json:"stock" binding:"required"`
+	ProductID     int  `json:"product_id" binding:"required"`
+	Stock         int  `json:"stock" binding:"required"`
+	ProductUnitID *int `json:"product_unit_id"`
 }

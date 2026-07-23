@@ -57,11 +57,14 @@ func GetSalesSummary(c *gin.Context) {
 		Where("shop_id = ? AND created_at >= ? AND created_at <= ?", shopID, startDate, endDate).
 		Scan(&result)
 
-	// 3. ดึงต้นทุนรวม (เหมือนเดิม)
+	// 3. ดึงต้นทุนรวม — unit-aware: ถ้าบิลนั้นขายเป็นหน่วยขายเพิ่มเติม (เช่น ลัง) ให้ใช้
+	// ต้นทุนของหน่วยนั้น (pu.cost_price) ไม่งั้น fallback เป็น conversion_qty × ต้นทุนหน่วยฐาน
+	// (บิลเก่าที่ conversion_qty=1, product_unit_id=NULL จะได้สูตรเดิมเป๊ะ ไม่กระทบตัวเลขเก่า)
 	database.DB.Table("sale_items").
-		Select("COALESCE(SUM(sale_items.amount * products.cost_price), 0) as total_cost").
+		Select("COALESCE(SUM(sale_items.amount * COALESCE(pu.cost_price, sale_items.conversion_qty * products.cost_price)), 0) as total_cost").
 		Joins("JOIN sales ON sales.sale_id = sale_items.sale_id").
 		Joins("JOIN products ON products.product_id = sale_items.product_id").
+		Joins("LEFT JOIN product_units pu ON pu.product_unit_id = sale_items.product_unit_id").
 		Where("sales.shop_id = ? AND sales.created_at >= ? AND sales.created_at <= ?", shopID, startDate, endDate).
 		Scan(&result.TotalCost)
 

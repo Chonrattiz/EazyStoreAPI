@@ -29,4 +29,10 @@ type SaleItem struct {
 	Amount       int     `json:"amount" gorm:"not null"`
 	PricePerUnit float64 `json:"price_per_unit" gorm:"type:decimal(10,2);not null"`
 	TotalPrice   float64 `json:"total_price" gorm:"type:decimal(10,2);not null"`
+
+	// Snapshot ของหน่วยที่ขายตอนนั้น (NULL/1 = ขายเป็นหน่วยฐาน เหมือนพฤติกรรมเดิม)
+	// ค่าพวกนี้ backend เป็นคนกำหนดเองเสมอ ไม่เชื่อค่าที่ client ส่งมา
+	ProductUnitID *int    `json:"product_unit_id"`
+	UnitName      *string `json:"unit_name"`
+	ConversionQty int     `json:"conversion_qty" gorm:"not null;default:1"`
 }

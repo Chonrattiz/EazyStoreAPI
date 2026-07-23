@@ -93,11 +93,18 @@ func GetProductsByShop(c *gin.Context) {
 	var totalItems int64
 
 	// 1. สร้าง Query พื้นฐาน
-	query := database.DB.Model(&models.Product{}).Preload("Category").Where("shop_id = ?", shopID)
+	query := database.DB.Model(&models.Product{}).
+		Preload("Category").
+		Preload("Units", "status = ?", true).
+		Where("shop_id = ?", shopID)
 
-	// 2. Filter: ค้นหา
+	// 2. Filter: ค้นหา (ชื่อ, บาร์โค้ดหลัก, รหัสสินค้า, และบาร์โค้ดของหน่วยขายเพิ่มเติม เช่น บาร์โค้ดของลัง)
 	if search != "" {
-		query = query.Where("name LIKE ? OR barcode LIKE ?", "%"+search+"%", "%"+search+"%")
+		like := "%" + search + "%"
+		query = query.Where(
+			"name LIKE ? OR barcode LIKE ? OR product_code LIKE ? OR product_id IN (SELECT product_id FROM product_units WHERE barcode LIKE ? AND status = 1)",
+			like, like, like, like,
+		)
 	}
 
 	// 3. Filter: หมวดหมู่ (เช็คให้ชัวร์ว่าไม่ใช่ "0" หรือว่าง)
@@ -190,13 +197,31 @@ func GetProductBySearch(c *gin.Context) {
 	// 3. ค้นหาโดยระบุ shop_id ด้วย
 	// SQL: SELECT * FROM products WHERE shop_id = ? AND (product_code = ? OR barcode = ? OR name LIKE ?) LIMIT 1
 	result := database.DB.Preload("Category").
+		Preload("Units", "status = ?", true).
 		Where("shop_id = ?", shopID). // ✅ ล็อคให้หาแค่ในร้านนี้เท่านั้น!
 		Where("product_code = ? OR barcode = ? OR name LIKE ?", keyword, keyword, "%"+keyword+"%").
 		First(&product)
 
 	if result.Error != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบสินค้าในร้านนี้"})
-		return
+		// 4. ไม่เจอด้วยบาร์โค้ด/รหัส/ชื่อของตัวสินค้าเอง ลองหาจากบาร์โค้ดของ
+		// หน่วยขายเพิ่มเติม (เช่น สแกนบาร์โค้ดที่แปะบนลัง) แทน
+		var unit models.ProductUnit
+		unitResult := database.DB.
+			Joins("JOIN products ON products.product_id = product_units.product_id").
+			Where("products.shop_id = ? AND product_units.barcode = ? AND product_units.status = 1", shopID, keyword).
+			First(&unit)
+
+		if unitResult.Error != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบสินค้าในร้านนี้"})
+			return
+		}
+
+		if err := database.DB.Preload("Category").Preload("Units", "status = ?", true).
+			First(&product, unit.ProductID).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบสินค้าในร้านนี้"})
+			return
+		}
+		product.MatchedUnit = &unit
 	}
 
 	c.JSON(http.StatusOK, product)

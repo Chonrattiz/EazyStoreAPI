@@ -3,6 +3,9 @@
 .env.local
 .env.production
 
+# MCP local config (contains DB credentials)
+.mcp.json
+
 # Go build artifacts
 *.exe
 *.exe~

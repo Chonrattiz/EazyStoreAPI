@@ -58,23 +58,47 @@ func CreateCreditSale(c *gin.Context) {
 			return fmt.Errorf("ยอดหนี้เกินวงเงินที่กำหนด (คงเหลือที่ค้างได้: %.2f บาท)", debtor.CreditLimit-debtor.CurrentDebt)
 		}
 
-		// ค. ตรวจสอบสินค้า เช็คสต๊อก และทำการตัดสต๊อก
-		for _, item := range input.SaleItems {
+		// ค. ตรวจสอบสินค้า เช็คสต๊อก และทำการตัดสต๊อก (รองรับขายเป็นหน่วยขายเพิ่มเติม เช่น ลัง)
+		for i := range input.SaleItems {
+			item := &input.SaleItems[i]
+
 			var product models.Product
 			// เช็คว่าสินค้ามีอยู่จริงและเป็นของร้านนี้
 			if err := tx.Where("product_id = ? AND shop_id = ?", item.ProductID, input.ShopID).First(&product).Error; err != nil {
 				return fmt.Errorf("ไม่พบสินค้ารหัส %d หรือไม่ใช่สินค้าของร้านคุณ", item.ProductID)
 			}
 
-			// เช็คว่าสต๊อกพอขายหรือไม่
-			if product.Stock < item.Amount {
-				return fmt.Errorf("สินค้า '%s' มีสต๊อกไม่พอ (คงเหลือ %d ชิ้น, ต้องการ %d ชิ้น)", product.Name, product.Stock, item.Amount)
+			// เซิร์ฟเวอร์เป็นคนแปลงหน่วย/ตัดสต๊อกเองเสมอ ไม่เชื่อ conversion_qty ที่ client ส่งมา
+			conv := 1
+			var unitName *string
+			if item.ProductUnitID != nil {
+				var unit models.ProductUnit
+				if err := tx.Where("product_unit_id = ? AND product_id = ?", *item.ProductUnitID, item.ProductID).
+					First(&unit).Error; err != nil {
+					return fmt.Errorf("ไม่พบหน่วยขายที่เลือกของสินค้า '%s'", product.Name)
+				}
+				conv = unit.ConversionQty
+				unitName = &unit.UnitName
+			}
+			item.ConversionQty = conv
+			item.UnitName = unitName
+
+			needed := item.Amount * conv
+
+			// เช็คว่าสต๊อกพอขายหรือไม่ (นับเป็นหน่วยฐานเสมอ)
+			if product.Stock < needed {
+				if conv > 1 {
+					return fmt.Errorf("สินค้า '%s' มีสต๊อกไม่พอ (ต้องการ %d %s = %d %s, คงเหลือ %d %s)",
+						product.Name, item.Amount, *unitName, needed, product.Unit, product.Stock, product.Unit)
+				}
+				return fmt.Errorf("สินค้า '%s' มีสต๊อกไม่พอ (คงเหลือ %d %s, ต้องการ %d %s)",
+					product.Name, product.Stock, product.Unit, item.Amount, product.Unit)
 			}
 
 			// ทำการตัดสต๊อก
 			if err := tx.Model(&models.Product{}).
 				Where("product_id = ?", item.ProductID).
-				UpdateColumn("stock", gorm.Expr("stock - ?", item.Amount)).Error; err != nil {
+				UpdateColumn("stock", gorm.Expr("stock - ?", needed)).Error; err != nil {
 				return fmt.Errorf("ไม่สามารถตัดสต๊อกสินค้า '%s' ได้: %v", product.Name, err)
 			}
 		}

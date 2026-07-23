@@ -35,13 +35,44 @@ func CreateProduct(c *gin.Context) {
 	}
 
 	if input.Barcode != nil && *input.Barcode != "" {
-		var count int64
-
-		database.DB.Model(&models.Product{}).Where("shop_id = ? AND barcode = ?", input.ShopID, *input.Barcode).Count(&count)
-
-		if count > 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "บาร์โค้ดนี้มีอยู่ในระบบของร้านนี้แล้ว"})
+		if used, msg := barcodeInUse(input.ShopID, *input.Barcode, 0, 0); used {
+			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
 			return
+		}
+	}
+
+	// ตรวจสอบหน่วยขายเพิ่มเติม (ลัง/แพ็ค) ที่ส่งมาพร้อมกันตอนสร้างสินค้า
+	seenUnitNames := map[string]bool{}
+	seenUnitBarcodes := map[string]bool{}
+	for i := range input.Units {
+		input.Units[i].ProductUnitID = 0
+		input.Units[i].Status = true
+
+		name := input.Units[i].UnitName
+		if name == input.Unit {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ชื่อหน่วยขาย \"" + name + "\" ซ้ำกับหน่วยฐานของสินค้า"})
+			return
+		}
+		if seenUnitNames[name] {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "มีหน่วยขายชื่อ \"" + name + "\" ซ้ำกันในสินค้าเดียวกัน"})
+			return
+		}
+		seenUnitNames[name] = true
+
+		if bc := input.Units[i].Barcode; bc != nil && *bc != "" {
+			if input.Barcode != nil && *input.Barcode == *bc {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "บาร์โค้ดหน่วยขายซ้ำกับบาร์โค้ดหลักของสินค้า"})
+				return
+			}
+			if seenUnitBarcodes[*bc] {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "บาร์โค้ดหน่วยขายซ้ำกันเองในสินค้าเดียวกัน"})
+				return
+			}
+			seenUnitBarcodes[*bc] = true
+			if used, msg := barcodeInUse(input.ShopID, *bc, 0, 0); used {
+				c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+				return
+			}
 		}
 	}
 
@@ -128,11 +159,28 @@ func UpdateStock(c *gin.Context) {
 		return
 	}
 
+	// ถ้าระบุ product_unit_id มา (เช่น เติมเป็น "ลัง") ให้แปลงเป็นจำนวนหน่วยฐานก่อน
+	// สต็อกยังเก็บเป็นหน่วยฐานที่เดียวเสมอ (ดูคอมเมนต์ที่ models.UpdateStockRequest)
+	addBase := input.Stock
+	var unitName *string
+
+	if input.ProductUnitID != nil {
+		var unit models.ProductUnit
+		if err := database.DB.
+			Where("product_unit_id = ? AND product_id = ?", *input.ProductUnitID, input.ProductID).
+			First(&unit).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบหน่วยขายนี้ของสินค้า"})
+			return
+		}
+		addBase = input.Stock * unit.ConversionQty
+		unitName = &unit.UnitName
+	}
+
 	//  อัปเดตแบบ "บวกเพิ่ม" (Atomic Update)
-	// ใช้ gorm.Expr("stock + ?", input.Stock) แทนการใส่ค่าตรงๆ
+	// ใช้ gorm.Expr("stock + ?", addBase) แทนการใส่ค่าตรงๆ
 	result := database.DB.Model(&models.Product{}).
 		Where("product_id = ?", input.ProductID).
-		Update("stock", gorm.Expr("stock + ?", input.Stock))
+		Update("stock", gorm.Expr("stock + ?", addBase))
 
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "อัปเดตไม่สำเร็จ: " + result.Error.Error()})
@@ -148,12 +196,18 @@ func UpdateStock(c *gin.Context) {
 	var updatedProduct models.Product
 	database.DB.Select("stock").First(&updatedProduct, input.ProductID)
 
-	c.JSON(http.StatusOK, gin.H{
-		"message":       "เพิ่มสต็อกสินค้าเรียบร้อย",
-		"product_id":    input.ProductID,
-		"added_amount":  input.Stock,          // จำนวนที่เติมเข้าไป
-		"current_stock": updatedProduct.Stock, // ยอดคงเหลือล่าสุดใน DB
-	})
+	resp := gin.H{
+		"message":            "เพิ่มสต็อกสินค้าเรียบร้อย",
+		"product_id":         input.ProductID,
+		"added_amount":       input.Stock, // จำนวนที่กรอก (นับเป็นหน่วยที่เลือก เช่น 10 ลัง)
+		"added_base_amount":  addBase,     // จำนวนที่แปลงเป็นหน่วยฐานแล้วบวกเข้าสต็อกจริง
+		"current_stock":      updatedProduct.Stock, // ยอดคงเหลือล่าสุดใน DB (หน่วยฐาน)
+	}
+	if unitName != nil {
+		resp["unit_name"] = *unitName
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 // UpdateProduct godoc
@@ -203,6 +257,17 @@ func UpdateProduct(c *gin.Context) {
 	if len(updateData) == 0 {
 		c.JSON(http.StatusOK, gin.H{"message": "ไม่มีข้อมูลเปลี่ยนแปลง", "data": product})
 		return
+	}
+
+	// ตรวจสอบบาร์โค้ดซ้ำ (เดิมจุดนี้ไม่เคยเช็คเลย ทั้งกับสินค้าอื่นและหน่วยขายอื่น)
+	if val, ok := updateData["barcode"]; ok {
+		bc, _ := val.(string)
+		if bc != "" {
+			if used, msg := barcodeInUse(product.ShopID, bc, product.ProductID, 0); used {
+				c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+				return
+			}
+		}
 	}
 
 	// ---------------------------------------------------------
