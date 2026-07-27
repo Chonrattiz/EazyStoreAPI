@@ -140,12 +140,11 @@ func GetAdvancedReport(c *gin.Context) {
 	// This keeps aging amounts in sync when a debtor pays off older debts later,
 	// instead of relying on the never-updated sales.pay column.
 	//
-	// Aging is computed "as of" the selected period's end_date, not CURDATE() —
-	// standard AR-aging convention (e.g. "aging as of 7/31/2026"). This lets the
-	// month/year picker on the report page move the aging snapshot too: browsing a
-	// past period shows aging as it stood then (sales/payments after end_date are
-	// excluded), and browsing a future period projects aging forward assuming no
-	// further payment happens before then (there simply are no future payments yet).
+	// Aging always reflects real-time status "as of today", regardless of which
+	// month/year the report page's period picker is set to — it is not a historical
+	// snapshot of that period. Only the other report sections (sales chart, summary,
+	// debt collection statement, etc.) are scoped to the selected start/end date.
+	asOfDate := time.Now().Format("2006-01-02")
 	var aging struct {
 		Safe    float64 `json:"safe"`    // 1-15 days
 		Warning float64 `json:"warning"` // 16-30 days
@@ -180,11 +179,11 @@ func GetAdvancedReport(c *gin.Context) {
 			LEFT JOIN debtor_paid p ON p.debtor_id = sd.debtor_id
 		)
 		SELECT
-			COALESCE(SUM(CASE WHEN DATEDIFF(?, created_at) <= 15 THEN remaining ELSE 0 END), 0) as safe,
-			COALESCE(SUM(CASE WHEN DATEDIFF(?, created_at) BETWEEN 16 AND 30 THEN remaining ELSE 0 END), 0) as warning,
-			COALESCE(SUM(CASE WHEN DATEDIFF(?, created_at) > 30 THEN remaining ELSE 0 END), 0) as danger
+			COALESCE(SUM(CASE WHEN DATEDIFF(?, created_at) + 1 <= 15 THEN remaining ELSE 0 END), 0) as safe,
+			COALESCE(SUM(CASE WHEN DATEDIFF(?, created_at) + 1 BETWEEN 16 AND 30 THEN remaining ELSE 0 END), 0) as warning,
+			COALESCE(SUM(CASE WHEN DATEDIFF(?, created_at) + 1 > 30 THEN remaining ELSE 0 END), 0) as danger
 		FROM remaining_per_sale
-	`, shopID, endDate, shopID, endDate, endDate, endDate, endDate).Scan(&aging)
+	`, shopID, asOfDate, shopID, asOfDate, asOfDate, asOfDate, asOfDate).Scan(&aging)
 
 	// 6. Top 5 Debtors
 	type TopDebtor struct {
@@ -255,6 +254,10 @@ func GetAgingReportDetail(c *gin.Context) {
 		Bucket      string  `json:"-"`
 	}
 
+	// Aging always reflects real-time status "as of today" — see the matching
+	// asOfDate comment in GetAdvancedReport.
+	asOfDate := time.Now().Format("2006-01-02")
+
 	var bills []AgingBill
 	database.DB.Raw(`
 		WITH sale_debts AS (
@@ -288,17 +291,17 @@ func GetAgingReportDetail(c *gin.Context) {
 			r.sale_id, r.debtor_id, d.name, d.phone, d.img_debtor,
 			r.created_at AS sale_date,
 			r.remaining AS amount_owed,
-			DATEDIFF(?, r.created_at) AS days_overdue,
+			DATEDIFF(?, r.created_at) + 1 AS days_overdue,
 			CASE
-				WHEN DATEDIFF(?, r.created_at) <= 15 THEN 'safe'
-				WHEN DATEDIFF(?, r.created_at) BETWEEN 16 AND 30 THEN 'warning'
+				WHEN DATEDIFF(?, r.created_at) + 1 <= 15 THEN 'safe'
+				WHEN DATEDIFF(?, r.created_at) + 1 BETWEEN 16 AND 30 THEN 'warning'
 				ELSE 'danger'
 			END AS bucket
 		FROM remaining_per_sale r
 		JOIN debtors d ON d.debtor_id = r.debtor_id
 		WHERE r.remaining > 0
 		ORDER BY days_overdue DESC, d.name
-	`, shopID, endDate, shopID, endDate, endDate, endDate, endDate).Scan(&bills)
+	`, shopID, asOfDate, shopID, asOfDate, asOfDate, asOfDate, asOfDate).Scan(&bills)
 
 	safe := []AgingBill{}
 	warning := []AgingBill{}
