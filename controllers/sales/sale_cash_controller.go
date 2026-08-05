@@ -37,6 +37,15 @@ func CreateSale(c *gin.Context) {
 	// 2. เริ่มต้น Transaction
 	tx := database.DB.Begin()
 
+	// เวลาไทย (Asia/Bangkok) — เซิร์ฟเวอร์มักตั้งเป็น UTC ต้องแปลงก่อน
+	// ไม่งั้นทั้งวันที่และเวลาที่บันทึกจะเพี้ยนไป 7 ชั่วโมง
+	loc, errLoc := time.LoadLocation("Asia/Bangkok")
+	if errLoc != nil {
+		loc = time.FixedZone("ICT", 7*60*60)
+	}
+	now := time.Now().In(loc)
+	nowTime := now.Format("15:04:05") // เก็บเวลาแยกในคอลัมน์ created_time
+
 	// 3. บันทึกลงตาราง sales
 	sale := models.Sale{
 		ShopID:        input.ShopID,
@@ -45,7 +54,8 @@ func CreateSale(c *gin.Context) {
 		Pay:           input.Pay,
 		PaymentMethod: input.PaymentMethod, // ใช้ค่าที่ส่งมาจาก Flutter (จ่ายเงินสด/โอนจ่าย)
 		Note:          "",
-		CreatedAt:     time.Now(),
+		CreatedAt:     now,
+		CreatedTime:   &nowTime,
 		CreatedBuy:    input.CreatedBuy,
 	}
     

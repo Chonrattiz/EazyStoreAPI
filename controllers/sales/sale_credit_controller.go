@@ -4,6 +4,7 @@ import (
 	"EazyStoreAPI/database"
 	"EazyStoreAPI/models"
 	"net/http"
+	"time"
 
 	"errors"
 	"fmt"
@@ -81,6 +82,17 @@ func CreateCreditSale(c *gin.Context) {
 
 		// ง. บันทึกข้อมูลการขาย (Sales & SaleItems)
 		// หมายเหตุ: GORM จะบันทึก SaleItems ให้โดยอัตโนมัติถ้า Struct Sale มี SaleItems
+		// เซ็ตวันที่/เวลาเป็นเวลาไทย (Asia/Bangkok) เพราะ Flutter ไม่ได้ส่ง created_time มา
+		// และเซิร์ฟเวอร์มักตั้ง timezone เป็น UTC จะทำให้เพี้ยนไป 7 ชั่วโมง
+		loc, errLoc := time.LoadLocation("Asia/Bangkok")
+		if errLoc != nil {
+			loc = time.FixedZone("ICT", 7*60*60)
+		}
+		now := time.Now().In(loc)
+		nowTime := now.Format("15:04:05")
+		input.CreatedAt = now
+		input.CreatedTime = &nowTime
+
 		if err := tx.Create(&input).Error; err != nil {
 			return err
 		}
