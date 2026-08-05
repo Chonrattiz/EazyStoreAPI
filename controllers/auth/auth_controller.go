@@ -73,7 +73,7 @@ func Register(c *gin.Context) {
 	database.DB.Save(&verification)
 
 	go func() {
-		err := resetController.SendEmailOTP(input.Email, otp)
+		err := resetController.SendEmailOTP(input.Email, otp, "Eazy Store - ยืนยันรหัส OTP")
 		if err != nil {
 			fmt.Printf("Register - Error sending email OTP to %s: %v\n", input.Email, err)
 		} else {
@@ -144,7 +144,7 @@ func ChangeEmailBeforeVerify(c *gin.Context) {
 	database.DB.Save(&verification)
 
 	go func() {
-		err := resetController.SendEmailOTP(input.NewEmail, otp)
+		err := resetController.SendEmailOTP(input.NewEmail, otp, "Eazy Store - ยืนยันรหัส OTP")
 		if err != nil {
 			fmt.Printf("ChangeEmailBeforeVerify - Error sending email OTP to %s: %v\n", input.NewEmail, err)
 		} else {

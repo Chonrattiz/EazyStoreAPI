@@ -150,7 +150,7 @@ func UpdateProfile(c *gin.Context) {
 		database.DB.Save(&verification)
 
 		// สั่งส่งอีเมลแบบ Asynchronous (ไม่บล็อกการทำงาน)
-		go resetController.SendEmailOTP(newEmail, otp)
+		go resetController.SendEmailOTP(newEmail, otp, "Eazy Store - ยืนยันรหัส OTP")
 	}
 
 	// 7. ดึงข้อมูลล่าสุดที่อัปเดตเสร็จแล้ว ส่งกลับไปให้หน้าแอป
