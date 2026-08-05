@@ -8,11 +8,6 @@ import (
 
 // ProfileRoutes รับ RouterGroup "/api" (ที่ผ่านการกรอง CheckAuth แล้ว) เข้ามาจัดการต่อ
 func ProfileRoutes(rg *gin.RouterGroup) {
-	// สร้าง Sub-group เพิ่มเป็น /api/profile
-	profileGroup := rg.Group("/profile")
-	{
-	
-		profileGroup.PUT("/update", UserController.UpdateProfile) 
-		profileGroup.GET("/", UserController.GetProfile)
-	}
+	rg.GET("/profile", UserController.GetProfile)    // ดูข้อมูลโปรไฟล์
+	rg.PUT("/profile", UserController.UpdateProfile) // แก้ไขข้อมูลโปรไฟล์
 }

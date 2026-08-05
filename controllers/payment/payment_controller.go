@@ -99,7 +99,7 @@ func PaymentDebt(c *gin.Context) {
 // @Summary      ดึงประวัติการจ่ายหนี้
 // @Description  ดึงรายการที่ลูกหนี้เคยนำเงินมาจ่ายจริง
 // @Tags         Debtor
-// @Router       /api/payments/{id} [get]
+// @Router       /api/debtors/{id}/payments [get]
 func GetDebtorPaymentHistory(c *gin.Context) {
     idParam := c.Param("id")
     debtorID, _ := strconv.Atoi(idParam)

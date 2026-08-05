@@ -115,14 +115,24 @@ func CreateProduct(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        request body models.UpdateStockRequest true "ข้อมูลอัปเดตสต็อก"
+// @Param        id      path      int  true  "Product ID"
+// @Param        request body      object{stock=int} true "จำนวนที่ต้องการเติม"
 // @Success      200  {object}  map[string]interface{} "message: success"
 // @Failure      400  {object}  map[string]string "Invalid input"
 // @Failure      500  {object}  map[string]string "Update failed"
-// @Router       /api/product/stock [put]
+// @Router       /api/products/{id}/stock [patch]
 func UpdateStock(c *gin.Context) {
-	var input models.UpdateStockRequest
+	// รับ Product ID จาก path (RESTful: PATCH /products/:id/stock)
+	productID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "รหัสสินค้าไม่ถูกต้อง"})
+		return
+	}
 
+	// รับเฉพาะจำนวนที่ต้องการเติมจาก body
+	var input struct {
+		Stock int `json:"stock" binding:"required"`
+	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
 		return
@@ -131,7 +141,7 @@ func UpdateStock(c *gin.Context) {
 	//  อัปเดตแบบ "บวกเพิ่ม" (Atomic Update)
 	// ใช้ gorm.Expr("stock + ?", input.Stock) แทนการใส่ค่าตรงๆ
 	result := database.DB.Model(&models.Product{}).
-		Where("product_id = ?", input.ProductID).
+		Where("product_id = ?", productID).
 		Update("stock", gorm.Expr("stock + ?", input.Stock))
 
 	if result.Error != nil {
@@ -146,11 +156,11 @@ func UpdateStock(c *gin.Context) {
 
 	// ดึงค่าล่าสุดมาโชว์
 	var updatedProduct models.Product
-	database.DB.Select("stock").First(&updatedProduct, input.ProductID)
+	database.DB.Select("stock").First(&updatedProduct, productID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":       "เพิ่มสต็อกสินค้าเรียบร้อย",
-		"product_id":    input.ProductID,
+		"product_id":    productID,
 		"added_amount":  input.Stock,          // จำนวนที่เติมเข้าไป
 		"current_stock": updatedProduct.Stock, // ยอดคงเหลือล่าสุดใน DB
 	})

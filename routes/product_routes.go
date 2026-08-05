@@ -13,7 +13,7 @@ func ProductRoutes(rg *gin.RouterGroup) {
 	rg.PUT("/products/:id", productController.UpdateProduct)         // แก้ไขสินค้า
 	rg.DELETE("/products/:id", productController.DeleteProduct)      // ลบสินค้า
 
-	rg.PUT("/products/stock", productController.UpdateStock)           // อัปเดตสต็อก
+	rg.PATCH("/products/:id/stock", productController.UpdateStock)     // เติมสต็อกสินค้า
 	rg.GET("/products/null-barcode", productController.GetNullBarcode) // หาสินค้าไม่มีบาร์โค้ด
 
 	// หมวดหมู่
