@@ -78,7 +78,13 @@ func ExportOrderPDF(c *gin.Context) {
 	pdf.SetTextColor(100, 100, 100)
 	pdf.Cell(120, 6, (result.Address))
 
-	currentTime := time.Now().Format("02/01/2006 | 15:04")
+	// เซิร์ฟเวอร์ (container) ส่วนใหญ่ตั้ง timezone เป็น UTC ทำให้ time.Now() ตรงๆ
+	// ได้เวลาที่เพี้ยนไป 7 ชั่วโมงจากเวลาไทย ต้องระบุ Asia/Bangkok ให้ชัดเจน
+	loc, err := time.LoadLocation("Asia/Bangkok")
+	if err != nil {
+		loc = time.FixedZone("ICT", 7*60*60) // เผื่อ container ไม่มี tzdata ให้ fallback เป็น UTC+7 ตรงๆ
+	}
+	currentTime := time.Now().In(loc).Format("02/01/2006 | 15:04")
 	pdf.CellFormat(0, 6, ("วันที่: " + currentTime), "", 1, "R", false, 0, "")
 
 	pdf.Cell(120, 6, ("เบอร์โทรศัพท์: " + result.Phone))
