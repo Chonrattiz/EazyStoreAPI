@@ -25,7 +25,7 @@ func GenerateOTP() string {
 }
 
 // ✅ SendEmailOTP เปลี่ยนมาใช้ Google Apps Script (ยิงผ่าน HTTP พอร์ต 443 ทะลุ Render 100%)
-func SendEmailOTP(targetEmail string, otpCode string) error {
+func SendEmailOTP(targetEmail string, otpCode string, subject string) error {
 	// ⚠️ สำคัญ: เอา URL ของ Google Apps Script ที่ได้จากขั้นตอน Deploy มาใส่ในเครื่องหมายคำพูดด้านล่างนี้
 	gasURL := "https://script.google.com/macros/s/AKfycbx68CqYnpCakrLJ3KmMHHKJxlKbuRzFqqcseE3K9A-NOGMjhVYUCTpJo6p5Kq0UHzvw/exec"
 
@@ -49,19 +49,31 @@ func SendEmailOTP(targetEmail string, otpCode string) error {
 	// สร้างข้อมูล JSON สำหรับส่งไปให้ Google
 	requestBody, _ := json.Marshal(map[string]string{
 		"to":       targetEmail,
-		"subject":  "Eazy Store - ยืนยันรหัสผ่านใหม่",
+		"subject":  subject,
 		"htmlBody": htmlContent,
 	})
 
-	// ยิง HTTP POST ไปที่ Google Script
-	resp, err := http.Post(gasURL, "application/json", bytes.NewBuffer(requestBody))
+	// Apps Script รันสคริปต์ (รวมถึงส่งเมล) ให้เสร็จก่อน แล้วค่อยตอบกลับด้วย 302
+	// ไปยัง URL แคชผลลัพธ์ (script.googleusercontent.com) — การไล่ตาม redirect นั้น
+	// เป็นแค่การไปอ่านผลลัพธ์ที่แคชไว้ ไม่เกี่ยวกับว่าเมลถูกส่งไปแล้วหรือยัง
+	// แต่ hop ที่สองนี้เจอปัญหาเน็ตหลุด/ช้าบ่อย ทำให้เข้าใจผิดว่าส่งเมลไม่สำเร็จ
+	// ทั้งที่จริงเมลถูกส่งไปตั้งแต่ hop แรกแล้ว จึงตั้ง client ไม่ให้ไล่ตาม redirect
+	// และถือว่า 200 หรือ 302 คือสำเร็จทั้งคู่
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	resp, err := client.Post(gasURL, "application/json", bytes.NewBuffer(requestBody))
 	if err != nil {
 		fmt.Println("❌ Error connecting to Google Script:", err.Error())
 		return err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 200 {
+	if resp.StatusCode == 200 || resp.StatusCode == 302 {
 		fmt.Println("✅ ส่ง OTP สำเร็จผ่าน Google Apps Script ทะลุ Render แล้ว!")
 		return nil
 	}
@@ -103,13 +115,13 @@ func RequestResetOTP(c *gin.Context) {
 		return
 	}
 
-	// 4. ส่งเมลเบื้องหลังด้วย Goroutine
-	go func() {
-		err := SendEmailOTP(input.Email, otp)
-		if err != nil {
-			fmt.Printf("Error sending email to %s: %v\n", input.Email, err)
-		}
-	}()
+	// 4. ส่งเมลและรอผลลัพธ์จริง เพื่อให้ frontend รู้ว่าส่งสำเร็จหรือไม่
+	// ก่อนจะยอมให้ผู้ใช้กดไปหน้ายืนยัน OTP
+	if err := SendEmailOTP(input.Email, otp, "Eazy Store - ยืนยันรหัสผ่านใหม่"); err != nil {
+		fmt.Printf("Error sending email to %s: %v\n", input.Email, err)
+		c.JSON(500, gin.H{"error": "ไม่สามารถส่งอีเมล OTP ได้ กรุณาลองใหม่อีกครั้ง"})
+		return
+	}
 
 	c.JSON(200, gin.H{"message": "ส่งรหัส OTP เรียบร้อยแล้ว"})
 }
