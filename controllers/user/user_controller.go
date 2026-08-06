@@ -125,7 +125,7 @@ func UpdateProfile(c *gin.Context) {
 	// 5. สั่งอัปเดตลง Database
 	if len(updateData) > 0 {
 		if err := database.DB.Model(&user).Updates(updateData).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "อัปเดตข้อมูลไม่สำเร็จ: " + err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "อัปเดตข้อมูลไม่สำเร็จ"})
 			return
 		}
 	} else {

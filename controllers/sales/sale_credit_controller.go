@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"EazyStoreAPI/database"
+	"EazyStoreAPI/middleware"
 	"EazyStoreAPI/models"
 	"net/http"
 	"time"
@@ -29,7 +30,7 @@ func CreateCreditSale(c *gin.Context) {
 
 	// 1. รับข้อมูล JSON
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลที่ส่งมาไม่ถูกต้องหรือไม่ครบถ้วน"})
 		return
 	}
 
@@ -41,6 +42,26 @@ func CreateCreditSale(c *gin.Context) {
 
 	if input.DebtorID == nil || *input.DebtorID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุรหัสลูกหนี้"})
+		return
+	}
+
+	if input.Pay < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "จำนวนเงินที่จ่ายต้องไม่ติดลบ"})
+		return
+	}
+
+	// จ่ายครบ/จ่ายเกิน = ไม่มียอดค้าง ถ้าปล่อยผ่านส่วนเกินจะถูกเอาไปหักหนี้ก้อนเก่าโดยไม่ตั้งใจ
+	if input.Pay >= input.NetPrice {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "รายการนี้จ่ายครบแล้ว ไม่มียอดค้างชำระ กรุณาบันทึกเป็นการขายเงินสดแทน",
+		})
+		return
+	}
+
+	// 2.5 shop_id มาจาก body ต้องตรวจว่าเป็นร้านของ user ที่ล็อกอินอยู่จริง
+	// ด้านล่างใช้ input.ShopID กรองลูกหนี้/สินค้าอยู่แล้ว แต่ถ้าไม่ตรวจตรงนี้
+	// ก็แค่สวมเป็นร้านอื่นทั้งบิลแทน (สร้างหนี้ให้ลูกหนี้ร้านอื่น + ตัดสต็อกร้านอื่น)
+	if !middleware.RequireShopAccess(c, input.ShopID) {
 		return
 	}
 
@@ -74,9 +95,9 @@ func CreateCreditSale(c *gin.Context) {
 
 			// ทำการตัดสต๊อก
 			if err := tx.Model(&models.Product{}).
-				Where("product_id = ?", item.ProductID).
+				Where("product_id = ? AND shop_id = ?", item.ProductID, input.ShopID).
 				UpdateColumn("stock", gorm.Expr("stock - ?", item.Amount)).Error; err != nil {
-				return fmt.Errorf("ไม่สามารถตัดสต๊อกสินค้า '%s' ได้: %v", product.Name, err)
+				return fmt.Errorf("ไม่สามารถตัดสต๊อกสินค้า '%s' ได้", product.Name)
 			}
 		}
 
@@ -94,23 +115,23 @@ func CreateCreditSale(c *gin.Context) {
 		input.CreatedTime = &nowTime
 
 		if err := tx.Create(&input).Error; err != nil {
-			return err
+			return errors.New("ไม่สามารถบันทึกรายการขายได้")
 		}
 
 		// จ. อัปเดตยอดหนี้ปัจจุบัน (current_debt)
 		if err := tx.Table("debtors").
-			Where("debtor_id = ?", input.DebtorID).
+			Where("debtor_id = ? AND shop_id = ?", input.DebtorID, input.ShopID).
 			UpdateColumn("current_debt", gorm.Expr("current_debt + ?", amountToCharge)).
 			Error; err != nil {
-			return err
+			return errors.New("ไม่สามารถอัปเดตยอดหนี้ของลูกหนี้ได้")
 		}
 
 		return nil
 	})
 
-	// 4. จัดการผลลัพธ์
+	// 4. จัดการผลลัพธ์ (ข้อความ error ใน Transaction เป็นภาษาไทยทั้งหมดแล้ว ส่งกลับได้เลย)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "บันทึกไม่สำเร็จ: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 

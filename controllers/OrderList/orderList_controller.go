@@ -3,6 +3,7 @@ package controllers
 import (
 	"EazyStoreAPI/assets"
 	"EazyStoreAPI/database"
+	"EazyStoreAPI/middleware"
 	"EazyStoreAPI/models"
 	"bytes"
 	"fmt"
@@ -16,7 +17,13 @@ import (
 func ExportOrderPDF(c *gin.Context) {
 	var req models.ExportRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		fmt.Println("❌ ExportOrderPDF bind error:", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลที่ส่งมาไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง"})
+		return
+	}
+
+	// PDF ที่ออกมามีชื่อร้าน ที่อยู่ และเบอร์เจ้าของร้าน ต้องตรวจสิทธิ์ก่อน
+	if !middleware.RequireShopAccess(c, req.ShopID) {
 		return
 	}
 
@@ -50,14 +57,14 @@ func ExportOrderPDF(c *gin.Context) {
 	regularFontBytes, err := assets.FontsFS.ReadFile("fonts/THSARABUNNEW.TTF")
 	if err != nil {
 		fmt.Println("❌ Error loading regular font:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load regular font: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างไฟล์ PDF ได้ (โหลดฟอนต์ไม่สำเร็จ)"})
 		return
 	}
 
 	boldFontBytes, err := assets.FontsFS.ReadFile("fonts/THSARABUNNEW BOLD.TTF")
 	if err != nil {
 		fmt.Println("❌ Error loading bold font:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load bold font: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างไฟล์ PDF ได้ (โหลดฟอนต์ตัวหนาไม่สำเร็จ)"})
 		return
 	}
 
@@ -133,7 +140,7 @@ func ExportOrderPDF(c *gin.Context) {
 	err = pdf.Output(&buf)
 	if err != nil {
 		fmt.Println("❌ PDF Error:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate PDF"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างไฟล์ PDF ได้ กรุณาลองใหม่อีกครั้ง"})
 		return
 	}
 

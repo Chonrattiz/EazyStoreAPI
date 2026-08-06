@@ -2,6 +2,7 @@ package controller
 
 import (
 	"EazyStoreAPI/database"
+	"EazyStoreAPI/middleware"
 	"EazyStoreAPI/models"
 	"net/http"
 	"time"
@@ -40,6 +41,12 @@ func PaymentDebt(c *gin.Context) {
 		return
 	}
 
+	// 1.5 ตรวจว่า shop_id ที่ส่งมาเป็นร้านของ user ที่ล็อกอินอยู่จริง
+	// ถ้าไม่ตรวจ จะเดา pin_code ของร้านอื่นแบบ brute force ผ่าน endpoint นี้ได้
+	if !middleware.RequireShopAccess(c, input.ShopID) {
+		return
+	}
+
 	// 2. 🔥 ตรวจสอบ PIN Code ของร้านค้า
 	var shop models.Shop
 	// ค้นหาร้านค้าด้วย ShopID และ PinCode
@@ -55,9 +62,9 @@ func PaymentDebt(c *gin.Context) {
 	// --- เริ่ม Transaction (เพื่อให้ข้อมูล Debt และ Payment ตรงกันเสมอ) ---
 	tx := database.DB.Begin()
 
-	// 3. ดึงข้อมูลลูกหนี้ปัจจุบัน
+	// 3. ดึงข้อมูลลูกหนี้ปัจจุบัน (ต้องเป็นลูกหนี้ของร้านนี้เท่านั้น)
 	var debtor models.Debtor
-	if err := tx.Where("debtor_id = ?", input.DebtorID).First(&debtor).Error; err != nil {
+	if err := tx.Where("debtor_id = ? AND shop_id = ?", input.DebtorID, input.ShopID).First(&debtor).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลลูกหนี้"})
 		return
@@ -116,6 +123,22 @@ func PaymentDebt(c *gin.Context) {
 func GetDebtorPaymentHistory(c *gin.Context) {
     idParam := c.Param("id")
     debtorID, _ := strconv.Atoi(idParam)
+
+    shopIDs, err := middleware.GetShopIDsFromAuth(c)
+    if err != nil {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบข้อมูลร้านค้าของผู้ใช้"})
+        return
+    }
+
+    // ลูกหนี้ต้องเป็นของร้านที่ user คนนี้เป็นเจ้าของ ไม่งั้นดูประวัติการจ่ายของร้านอื่นได้
+    var debtorCount int64
+    database.DB.Model(&models.Debtor{}).
+        Where("debtor_id = ? AND shop_id IN ?", debtorID, shopIDs).
+        Count(&debtorCount)
+    if debtorCount == 0 {
+        c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลลูกหนี้"})
+        return
+    }
 
     var payments []models.DebtPayment
     // ดึงข้อมูลประวัติการจ่ายเงิน เรียงจากล่าสุดไปหาเก่าสุด

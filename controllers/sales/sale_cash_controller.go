@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"EazyStoreAPI/database"
+	"EazyStoreAPI/middleware"
 	"EazyStoreAPI/models"
 	"net/http"
 	"time"
@@ -30,7 +31,12 @@ func CreateSale(c *gin.Context) {
 
 	// 1. Bind JSON และตรวจสอบข้อมูลพื้นฐาน
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลการขายไม่ครบถ้วนหรือรูปแบบไม่ถูกต้อง"})
+		return
+	}
+
+	// 1.5 shop_id มาจาก body ต้องตรวจว่าเป็นร้านของ user ที่ล็อกอินอยู่จริง
+	if !middleware.RequireShopAccess(c, input.ShopID) {
 		return
 	}
 
@@ -66,12 +72,27 @@ func CreateSale(c *gin.Context) {
 
 	if err := tx.Create(&sale).Error; err != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create sale record"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกรายการขายได้"})
 		return
 	}
 
 	// 4. วนลูปบันทึกลงตาราง sale_items
 	for _, item := range input.SaleItems {
+		// สินค้าทุกชิ้นในบิลต้องเป็นสินค้าของร้านนี้ ไม่งั้นจะขาย (และตัดสต็อก) สินค้าร้านอื่นได้
+		var productCount int64
+		if err := tx.Model(&models.Product{}).
+			Where("product_id = ? AND shop_id = ?", item.ProductID, input.ShopID).
+			Count(&productCount).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถตรวจสอบสินค้าได้"})
+			return
+		}
+		if productCount == 0 {
+			tx.Rollback()
+			c.JSON(http.StatusBadRequest, gin.H{"error": "พบสินค้าที่ไม่ใช่ของร้านนี้ในรายการขาย"})
+			return
+		}
+
 		saleItem := models.SaleItem{
 			SaleID:       sale.SaleID, // ID จากที่เพิ่ง Save เมื่อครู่
 			ProductID:    item.ProductID,
@@ -82,15 +103,15 @@ func CreateSale(c *gin.Context) {
 
 		if err := tx.Create(&saleItem).Error; err != nil {
 			tx.Rollback()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to record item: " + err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกรายการสินค้าในบิลได้"})
 			return
 		}
 
 		// 5. ตัดสต็อกสินค้า (Optional แนะนำให้ทำ)
-		if err := tx.Table("products").Where("product_id = ?", item.ProductID).
+		if err := tx.Table("products").Where("product_id = ? AND shop_id = ?", item.ProductID, input.ShopID).
 			UpdateColumn("stock", database.DB.Raw("stock - ?", item.Amount)).Error; err != nil {
 			tx.Rollback()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update stock"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถตัดสต็อกสินค้าได้"})
 			return
 		}
 	}

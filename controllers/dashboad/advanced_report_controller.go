@@ -2,6 +2,7 @@ package controller
 
 import (
 	"EazyStoreAPI/database"
+	"EazyStoreAPI/middleware"
 	"net/http"
 	"time"
 
@@ -9,11 +10,15 @@ import (
 )
 
 func GetAdvancedReport(c *gin.Context) {
-	shopID := c.Query("shop_id")
+	shopID, ok := middleware.RequireShopIDQuery(c)
+	if !ok {
+		return
+	}
+
 	startDate := c.Query("start_date")
 	endDate := c.Query("end_date")
 
-	if shopID == "" || startDate == "" || endDate == "" {
+	if startDate == "" || endDate == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาส่ง shop_id, start_date และ end_date ให้ครบถ้วน"})
 		return
 	}
@@ -264,10 +269,13 @@ func GetAdvancedReport(c *gin.Context) {
 // FIFO-waterfall remaining-balance logic (sale_debts/debtor_paid/remaining_per_sale)
 // so SUM(amount_owed) per bucket here reconciles with aging_report.safe/warning/danger.
 func GetAgingReportDetail(c *gin.Context) {
-	shopID := c.Query("shop_id")
-	endDate := c.Query("end_date")
+	shopID, ok := middleware.RequireShopIDQuery(c)
+	if !ok {
+		return
+	}
 
-	if shopID == "" || endDate == "" {
+	endDate := c.Query("end_date")
+	if endDate == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาส่ง shop_id และ end_date ให้ครบถ้วน"})
 		return
 	}

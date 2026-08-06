@@ -2,6 +2,7 @@ package controller
 
 import (
 	"EazyStoreAPI/database"
+	"EazyStoreAPI/middleware"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -19,11 +20,15 @@ type TransactionDetail struct {
 
 // GetTransactionsDetail ดึงรายการบิลในช่วงเวลา
 func GetTransactionsDetail(c *gin.Context) {
-	shopID := c.Query("shop_id")
+	shopID, ok := middleware.RequireShopIDQuery(c)
+	if !ok {
+		return
+	}
+
 	startDate := c.Query("start_date")
 	endDate := c.Query("end_date")
 
-	if shopID == "" || startDate == "" || endDate == "" {
+	if startDate == "" || endDate == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาส่ง shop_id, start_date และ end_date"})
 		return
 	}
@@ -51,11 +56,15 @@ type ProductSalesDetail struct {
 
 // GetProductSalesDetail ดึงข้อมูลยอดขายแยกตามสินค้าในช่วงเวลา
 func GetProductSalesDetail(c *gin.Context) {
-	shopID := c.Query("shop_id")
+	shopID, ok := middleware.RequireShopIDQuery(c)
+	if !ok {
+		return
+	}
+
 	startDate := c.Query("start_date")
 	endDate := c.Query("end_date")
 
-	if shopID == "" || startDate == "" || endDate == "" {
+	if startDate == "" || endDate == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาส่ง shop_id, start_date และ end_date"})
 		return
 	}
@@ -106,10 +115,13 @@ type SaleDetailResponse struct {
 
 // GetSaleItems ดึงข้อมูลรายละเอียดบิลและรายการสินค้าในบิลนั้นๆ
 func GetSaleItems(c *gin.Context) {
-	shopID := c.Query("shop_id")
-	saleID := c.Query("sale_id")
+	shopID, ok := middleware.RequireShopIDQuery(c)
+	if !ok {
+		return
+	}
 
-	if shopID == "" || saleID == "" {
+	saleID := c.Query("sale_id")
+	if saleID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาส่ง shop_id และ sale_id"})
 		return
 	}

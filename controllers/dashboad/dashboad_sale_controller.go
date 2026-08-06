@@ -2,6 +2,7 @@ package controller
 
 import (
 	"EazyStoreAPI/database"
+	"EazyStoreAPI/middleware"
 
 	"net/http"
 
@@ -11,11 +12,16 @@ import (
 // GetSalesSummary ดึงข้อมูลสรุปยอดขาย (รายวัน/เดือน/ปี)
 // GetSalesSummary ดึงข้อมูลสรุปยอดขาย (รายวัน/เดือน/ปี)
 func GetSalesSummary(c *gin.Context) {
-	shopID := c.Query("shop_id")
+	// ตรวจว่า shop_id ที่ส่งมาเป็นร้านของ user ที่ล็อกอินอยู่จริง กันดูยอดขายร้านอื่น
+	shopID, ok := middleware.RequireShopIDQuery(c)
+	if !ok {
+		return
+	}
+
 	startDate := c.Query("start_date")
 	endDate := c.Query("end_date")
 
-	if shopID == "" || startDate == "" || endDate == "" {
+	if startDate == "" || endDate == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาส่ง shop_id, start_date และ end_date ให้ครบถ้วน"})
 		return
 	}

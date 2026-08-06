@@ -39,7 +39,7 @@ func nowInBangkok() time.Time {
 func Register(c *gin.Context) {
 	var input models.RegisterInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลสมัครสมาชิกไม่ครบถ้วน กรุณากรอกให้ครบทุกช่อง"})
 		return
 	}
 
