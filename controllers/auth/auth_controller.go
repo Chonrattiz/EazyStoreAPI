@@ -16,6 +16,15 @@ import (
 	"EazyStoreAPI/models"
 )
 
+// nowInBangkok คืนเวลาปัจจุบันแบบเวลาไทย เพราะเซิร์ฟเวอร์ (Render) ใช้ OS timezone เป็น UTC
+func nowInBangkok() time.Time {
+	loc, err := time.LoadLocation("Asia/Bangkok")
+	if err != nil {
+		loc = time.FixedZone("ICT", 7*60*60)
+	}
+	return time.Now().In(loc)
+}
+
 // --------------------------------------------------------------------
 // ฟังก์ชัน Register
 // --------------------------------------------------------------------
@@ -207,7 +216,7 @@ func Login(c *gin.Context) {
 	}
 
 	// 5. สร้าง Access Token (อายุ 15 นาที)
-	accessTokenExpiry := time.Now().Add(15 * time.Minute)
+	accessTokenExpiry := nowInBangkok().Add(15 * time.Minute)
 	accessClaims := jwt.MapClaims{
 		"user_id":  user.UserID,
 		"username": user.Username,
@@ -224,8 +233,8 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// 6. สร้าง Refresh Token (อายุ 7 วัน)
-	refreshTokenExpiry := time.Now().Add(7 * 24 * time.Hour)
+	// 6. สร้าง Refresh Token (อายุ 1 เดือน)
+	refreshTokenExpiry := nowInBangkok().AddDate(0, 1, 0)
 	refreshClaims := jwt.MapClaims{
 		"user_id": user.UserID,
 		"type":    "refresh",
@@ -244,6 +253,14 @@ func Login(c *gin.Context) {
 		UserID:    user.UserID,
 		Token:     refreshTokenString,
 		ExpiresAt: refreshTokenExpiry,
+	}
+	if input.DeviceID != "" {
+		deviceID := input.DeviceID
+		refreshTokenRecord.DeviceID = &deviceID
+	}
+	if input.DeviceName != "" {
+		deviceName := input.DeviceName
+		refreshTokenRecord.DeviceName = &deviceName
 	}
 	if err := database.DB.Create(&refreshTokenRecord).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึก token ได้"})
@@ -322,7 +339,7 @@ func Refresh(c *gin.Context) {
 	}
 
 	// 5. ตรวจสอบว่า refresh token ยังไม่หมดอายุ
-	if time.Now().After(refreshTokenRecord.ExpiresAt) {
+	if nowInBangkok().After(refreshTokenRecord.ExpiresAt) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token หมดอายุแล้ว"})
 		return
 	}
@@ -335,7 +352,7 @@ func Refresh(c *gin.Context) {
 	}
 
 	// 7. สร้าง Access Token ใหม่
-	accessTokenExpiry := time.Now().Add(15 * time.Minute)
+	accessTokenExpiry := nowInBangkok().Add(15 * time.Minute)
 	accessClaims := jwt.MapClaims{
 		"user_id":  user.UserID,
 		"username": user.Username,
@@ -371,6 +388,12 @@ func Refresh(c *gin.Context) {
 // @Success      200 {object} map[string]string
 // @Router       /api/auth/logout [post]
 func Logout(c *gin.Context) {
+	// 0. ดึง device_id จาก body (ไม่บังคับ) — ถ้าส่งมาจะ logout เฉพาะเครื่องนั้น ถ้าไม่ส่งจะ logout ทุกเครื่อง
+	var body struct {
+		DeviceID string `json:"device_id"`
+	}
+	_ = c.ShouldBindJSON(&body)
+
 	// 1. ดึง Access Token จาก header
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
@@ -413,12 +436,18 @@ func Logout(c *gin.Context) {
 	}
 	userID := uint(userIDFloat)
 
-	// 6. ยกเลิกทั้งหมด refresh token ของผู้ใช้นี้ (logout ทุกอุปกรณ์)
-	// หรือถ้าต้องการ logout เฉพาะอุปกรณ์นี้ สามารถเพิ่มเงื่อนไข device_id ได้
-	now := time.Now()
-	if err := database.DB.Model(&models.RefreshToken{}).
-		Where("user_id = ? AND revoked_at IS NULL", userID).
-		Update("revoked_at", now).Error; err != nil {
+	// 6. ยกเลิก refresh token ของผู้ใช้นี้
+	// ถ้ามี device_id ส่งมา จะยกเลิกเฉพาะเครื่องนั้น ถ้าไม่ส่งมา (client รุ่นเก่า) จะยกเลิกทุกเครื่อง
+	now := nowInBangkok()
+	query := database.DB.Model(&models.RefreshToken{}).
+		Where("user_id = ? AND revoked_at IS NULL", userID)
+	if body.DeviceID != "" {
+		query = query.Where("device_id = ?", body.DeviceID)
+	}
+	if err := query.Updates(map[string]interface{}{
+		"revoked_at":     now,
+		"revoked_reason": "logout",
+	}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถออกจากระบบได้"})
 		return
 	}

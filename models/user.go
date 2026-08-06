@@ -39,4 +39,8 @@ type LoginInput struct {
 	// รับค่ามาเป็น "username" แต่เราจะเอาไปเช็คว่าเป็น Email หรือ เบอร์โทร ใน Controller
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
+	// DeviceID ไม่บังคับ ใช้แยกว่า refresh token นี้เป็นของเครื่องไหน เพื่อให้ logout เฉพาะเครื่องได้
+	DeviceID string `json:"device_id"`
+	// DeviceName ไม่บังคับ ชื่อรุ่นเครื่องแบบอ่านง่าย เก็บไว้โชว์ผลเฉยๆ
+	DeviceName string `json:"device_name"`
 }

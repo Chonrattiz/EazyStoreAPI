@@ -4,6 +4,7 @@ package database
 import (
 	models "EazyStoreAPI/models"
 	"fmt"
+	"time"
 
 	"gorm.io/driver/mysql" // เปลี่ยนจาก sqlite เป็น mysql
 	"gorm.io/gorm"
@@ -15,7 +16,17 @@ func SetupDatabaseConnection() {
 
 	dsn := "66011212083:66011212083@tcp(202.28.34.210:3309)/db66011212083?charset=utf8mb4&parseTime=True&loc=Local"
 
-	database, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	// เซิร์ฟเวอร์ (Render) ตั้ง OS timezone เป็น UTC ค่าเริ่มต้น
+	// ถ้าไม่แปลงก่อน created_at/updated_at ที่ GORM เติมอัตโนมัติจะเพี้ยนไป 7 ชั่วโมง
+	database, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		NowFunc: func() time.Time {
+			loc, err := time.LoadLocation("Asia/Bangkok")
+			if err != nil {
+				loc = time.FixedZone("ICT", 7*60*60)
+			}
+			return time.Now().In(loc)
+		},
+	})
 
 	if err != nil {
 		panic("เชื่อมต่อฐานข้อมูลไม่สำเร็จ ❌: " + err.Error())

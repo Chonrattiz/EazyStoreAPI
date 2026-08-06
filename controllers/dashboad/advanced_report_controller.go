@@ -92,11 +92,41 @@ func GetAdvancedReport(c *gin.Context) {
 	database.DB.Table("sales").
 		Select(`
 			COALESCE(SUM(CASE WHEN payment_method = 'จ่ายเงินสด' THEN (CASE WHEN pay >= net_price THEN net_price ELSE pay END) ELSE 0 END), 0) as paid_cash,
-			COALESCE(SUM(CASE WHEN payment_method = 'โอนจ่าย' THEN (CASE WHEN pay >= net_price THEN net_price ELSE pay END) ELSE 0 END), 0) as paid_transfer,
-			COALESCE(SUM(CASE WHEN pay < net_price OR payment_method = 'ค้างชำระ' THEN net_price - pay ELSE 0 END), 0) as debt_amount
+			COALESCE(SUM(CASE WHEN payment_method = 'โอนจ่าย' THEN (CASE WHEN pay >= net_price THEN net_price ELSE pay END) ELSE 0 END), 0) as paid_transfer
 		`).
 		Where("shop_id = ? AND created_at >= ? AND created_at <= ?", shopID, startDate, endDate).
 		Scan(&paymentStats)
+
+	// debt_amount ต้องหักด้วยเงินที่ลูกหนี้จ่ายคืนทีหลังผ่านตาราง debt_payments ด้วย
+	// (ใช้ FIFO waterfall แบบเดียวกับ Aging Report ด้านล่าง) ไม่ใช่แค่ net_price - pay ตอนขาย
+	// เพราะคอลัมน์ sales.pay ไม่เคยถูกอัปเดตย้อนหลังตอนลูกหนี้มาชำระเพิ่ม
+	database.DB.Raw(`
+		WITH sale_debts AS (
+			SELECT
+				s.sale_id, s.debtor_id, s.created_at,
+				(s.net_price - s.pay) AS original_debt,
+				SUM(s.net_price - s.pay) OVER (
+					PARTITION BY s.debtor_id ORDER BY s.created_at, s.sale_id
+				) AS cumulative_debt
+			FROM sales s
+			WHERE s.shop_id = ?
+				AND s.debtor_id IS NOT NULL
+				AND (s.pay < s.net_price OR s.payment_method = 'ค้างชำระ')
+		),
+		debtor_paid AS (
+			SELECT dp.debtor_id, SUM(dp.amount_paid) AS total_paid
+			FROM debt_payments dp
+			JOIN debtors d ON d.debtor_id = dp.debtor_id
+			WHERE d.shop_id = ?
+			GROUP BY dp.debtor_id
+		)
+		SELECT COALESCE(SUM(
+			GREATEST(0, LEAST(sd.original_debt, sd.cumulative_debt - COALESCE(p.total_paid, 0)))
+		), 0) AS debt_amount
+		FROM sale_debts sd
+		LEFT JOIN debtor_paid p ON p.debtor_id = sd.debtor_id
+		WHERE DATE(sd.created_at) >= ? AND DATE(sd.created_at) <= ?
+	`, shopID, shopID, startDate, endDate).Scan(&paymentStats.DebtAmount)
 
 	// 3. Top 5 Products
 	type TopProduct struct {
