@@ -35,6 +35,11 @@ func PaymentDebt(c *gin.Context) {
 		return
 	}
 
+	if input.AmountPaid <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "จำนวนเงินที่ชำระไม่ถูกต้อง"})
+		return
+	}
+
 	// 2. 🔥 ตรวจสอบ PIN Code ของร้านค้า
 	var shop models.Shop
 	// ค้นหาร้านค้าด้วย ShopID และ PinCode
@@ -58,13 +63,20 @@ func PaymentDebt(c *gin.Context) {
 		return
 	}
 
-	// 4. คำนวณยอดหนี้คงเหลือใหม่
-	newTotalDebt := debtor.CurrentDebt - input.AmountPaid
+	// 4. คำนวณยอดที่ไปหักหนี้จริง (cap ไม่ให้เกินยอดหนี้คงเหลือ) ส่วนเกินคือเงินทอน ไม่ใช่ยอดที่เก็บหนี้ได้
+	appliedAmount := input.AmountPaid
+	change := 0.0
+	if appliedAmount > debtor.CurrentDebt {
+		change = appliedAmount - debtor.CurrentDebt
+		appliedAmount = debtor.CurrentDebt
+	}
+	newTotalDebt := debtor.CurrentDebt - appliedAmount
 
-	// 5. บันทึกประวัติการจ่ายเงิน (DebtPayment)
+	// 5. บันทึกประวัติการจ่ายเงิน (DebtPayment) — amount_paid คือยอดที่หักหนี้จริง ไม่รวมเงินทอน
+	// เพื่อให้ SUM(amount_paid) ในรายงาน "เก็บหนี้ได้" ตรงกับยอดหนี้ที่ลดลงจริง
 	newPayment := models.DebtPayment{
 		DebtorID:      input.DebtorID,
-		AmountPaid:    input.AmountPaid,
+		AmountPaid:    appliedAmount,
 		PaymentMethod: input.PaymentMethod,
 		CurrentDebt:   newTotalDebt, // บันทึกยอดคงเหลือ ณ ขณะนั้น
 		PaymentDate:   time.Now(),
@@ -90,6 +102,7 @@ func PaymentDebt(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message":    "บันทึกการชำระเงินเรียบร้อย",
 		"new_debt":   newTotalDebt,
+		"change":     change,
 		"payment_id": newPayment.PaymentID,
 	})
 }
