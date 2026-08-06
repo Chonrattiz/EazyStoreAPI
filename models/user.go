@@ -17,9 +17,12 @@ type User struct {
 
 // โครงสร้างสำหรับยืนยันอีเมลตอนสมัคร
 type EmailVerification struct {
-	Email     string    `gorm:"primaryKey;type:varchar(100)"`
-	OTPCode   string    `gorm:"not null"`
-	ExpiresAt time.Time `gorm:"not null"`
+	Email     string    `gorm:"primaryKey;type:varchar(100)" json:"email"`
+	OTPCode   string    `gorm:"not null" json:"otp_code"`
+	// ไม่มี <-:create เพราะอยากให้ created_at รีเฟรชเป็นเวลาที่ขอ OTP รอบล่าสุดทุกครั้งที่กดขอใหม่ (resend)
+	// precision:0 กัน GORM เติมทศนิยมวินาที (datetime(3)) ให้อัตโนมัติ จะได้ไม่มี .513 ต่อท้าย
+	CreatedAt time.Time `gorm:"precision:0;not null" json:"created_at"`
+	ExpiresAt time.Time `gorm:"precision:0;not null" json:"expires_at"`
 }
 
 // ฟังก์ชันนี้บอก GORM ว่า struct นี้คู่กับตารางชื่อ "users"

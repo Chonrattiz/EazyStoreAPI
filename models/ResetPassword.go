@@ -8,9 +8,10 @@ import (
 type PasswordReset struct {
     Email     string    `gorm:"primaryKey;type:varchar(100)" json:"email"`
     OTPCode   string    `gorm:"not null" json:"otp_code"`
-    // เพิ่ม <-:create เพื่อบอกว่าให้เขียนค่าเฉพาะตอนสร้าง (Create) เท่านั้น
-    CreatedAt time.Time `gorm:"autoCreateTime;<-:create" json:"created_at"` 
-    ExpiresAt time.Time `gorm:"not null" json:"expires_at"`
+    // ไม่มี <-:create เพราะอยากให้ created_at รีเฟรชเป็นเวลาที่ขอ OTP รอบล่าสุดทุกครั้งที่กดขอใหม่ (resend)
+    // precision:0 กัน GORM เติมทศนิยมวินาที (datetime(3)) ให้อัตโนมัติ จะได้ไม่มี .513 ต่อท้าย
+    CreatedAt time.Time `gorm:"precision:0;not null" json:"created_at"`
+    ExpiresAt time.Time `gorm:"precision:0;not null" json:"expires_at"`
 }
 
 // --- โซน Input สำหรับรับค่าจาก API (DTO) ---

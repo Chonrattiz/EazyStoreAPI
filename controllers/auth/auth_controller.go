@@ -54,9 +54,14 @@ func Register(c *gin.Context) {
 		}
 
 		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(input.Password), 14)
+		existingUser.Username = input.Username
 		existingUser.Email = input.Email
+		existingUser.Phone = input.Phone
 		existingUser.Password = string(hashedPassword)
-		database.DB.Save(&existingUser)
+		if err := database.DB.Save(&existingUser).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสมัครสมาชิกได้"})
+			return
+		}
 	} else {
 
 		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(input.Password), 14)
@@ -74,12 +79,18 @@ func Register(c *gin.Context) {
 	}
 
 	otp := resetController.GenerateOTP()
+	now := time.Now()
 	verification := models.EmailVerification{
 		Email:     input.Email,
 		OTPCode:   otp,
-		ExpiresAt: time.Now().Add(15 * time.Minute),
+		CreatedAt: now,
+		ExpiresAt: now.Add(10 * time.Minute),
 	}
-	database.DB.Save(&verification)
+	if err := database.DB.Save(&verification).Error; err != nil {
+		fmt.Println("Register - Database Error saving EmailVerification:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกรหัส OTP ได้"})
+		return
+	}
 
 	go func() {
 		err := resetController.SendEmailOTP(input.Email, otp, "Eazy Store - ยืนยันรหัส OTP")
@@ -145,12 +156,18 @@ func ChangeEmailBeforeVerify(c *gin.Context) {
 
 	// ส่ง OTP ใหม่ไปที่เมลใหม่
 	otp := resetController.GenerateOTP()
+	now := time.Now()
 	verification := models.EmailVerification{
 		Email:     input.NewEmail,
 		OTPCode:   otp,
-		ExpiresAt: time.Now().Add(15 * time.Minute),
+		CreatedAt: now,
+		ExpiresAt: now.Add(10 * time.Minute),
 	}
-	database.DB.Save(&verification)
+	if err := database.DB.Save(&verification).Error; err != nil {
+		fmt.Println("ChangeEmailBeforeVerify - Database Error saving EmailVerification:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกรหัส OTP ได้"})
+		return
+	}
 
 	go func() {
 		err := resetController.SendEmailOTP(input.NewEmail, otp, "Eazy Store - ยืนยันรหัส OTP")

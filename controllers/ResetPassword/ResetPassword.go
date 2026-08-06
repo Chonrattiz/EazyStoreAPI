@@ -100,12 +100,15 @@ func RequestResetOTP(c *gin.Context) {
 
 	// 2. เตรียมข้อมูล OTP ใหม่
 	otp := GenerateOTP()
-	expiresAt := time.Now().Add(10 * time.Minute)
+	now := time.Now()
+	expiresAt := now.Add(10 * time.Minute)
 
-	// 3. ใช้เทคนิค "Upsert" (Update หรือ Insert)
+	// 3. ใช้เทคนิค "Upsert" (Update หรือ Insert) — ตั้ง CreatedAt ใหม่ทุกครั้งที่ขอ OTP
+	// เพื่อให้ created_at เป็นเวลาของ OTP ชุดล่าสุดเสมอ ไม่ใช่ค้างจากรอบแรกสุด
 	resetData := models.PasswordReset{
 		Email:     input.Email,
 		OTPCode:   otp,
+		CreatedAt: now,
 		ExpiresAt: expiresAt,
 	}
 

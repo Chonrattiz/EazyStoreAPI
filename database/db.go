@@ -35,10 +35,23 @@ func SetupDatabaseConnection() {
 	// เชื่อมต่อสำเร็จ
 	fmt.Println("เชื่อมต่อฐานข้อมูล db66011212083 สำเร็จแล้ว! ✅")
 
+	// เซิร์ฟเวอร์ MySQL ปิด connection ที่ idle นานเกิน wait_timeout ของมันเองแบบเงียบๆ
+	// ถ้าไม่ตั้งอายุ connection ในฝั่ง Go ไว้ พอ connection ใน pool ค้างว่างนานเกินไป
+	// ครั้งถัดไปที่หยิบมาใช้จะเจอ error "invalid connection" เพราะปลายทางตัดสายไปแล้ว
+	sqlDB, err := database.DB()
+	if err != nil {
+		panic("ไม่สามารถตั้งค่า connection pool ได้ ❌: " + err.Error())
+	}
+	sqlDB.SetConnMaxLifetime(3 * time.Minute)
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetMaxOpenConns(20)
+
 	// AutoMigrate: เช็คว่า Struct ใน Go ตรงกับ Table ใน MySQL ไหม
 	// ถ้ายังไม่มีตาราง users ระบบจะสร้างให้ (แต่เราสร้างไว้แล้ว มันจะแค่เช็คเฉยๆ)
 	database.AutoMigrate(&models.User{})
 	database.AutoMigrate(&models.RefreshToken{})
+	database.AutoMigrate(&models.PasswordReset{})
+	database.AutoMigrate(&models.EmailVerification{})
 
 	DB = database
 }

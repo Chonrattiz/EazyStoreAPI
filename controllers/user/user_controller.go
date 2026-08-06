@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -140,14 +141,20 @@ func UpdateProfile(c *gin.Context) {
 	// 6. ✨ สร้าง OTP และส่ง Email (ใช้ฟังก์ชันเดิมของคุณเลย)
 	if needsOTP {
 		otp := resetController.GenerateOTP()
-		
+		now := time.Now()
+
 		// บันทึกลงตาราง EmailVerification
 		verification := models.EmailVerification{
 			Email:     newEmail,
 			OTPCode:   otp,
-			ExpiresAt: time.Now().Add(15 * time.Minute),
+			CreatedAt: now,
+			ExpiresAt: now.Add(10 * time.Minute),
 		}
-		database.DB.Save(&verification)
+		if err := database.DB.Save(&verification).Error; err != nil {
+			fmt.Println("UpdateProfile - Database Error saving EmailVerification:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "อัปเดตอีเมลสำเร็จ แต่ไม่สามารถส่งรหัส OTP ได้ กรุณาลองส่งรหัสอีกครั้ง"})
+			return
+		}
 
 		// สั่งส่งอีเมลแบบ Asynchronous (ไม่บล็อกการทำงาน)
 		go resetController.SendEmailOTP(newEmail, otp, "Eazy Store - ยืนยันรหัส OTP")
