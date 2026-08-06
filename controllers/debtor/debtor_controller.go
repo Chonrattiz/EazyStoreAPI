@@ -4,6 +4,7 @@ import (
 	"EazyStoreAPI/database"
 	"net/http"
 
+	"EazyStoreAPI/middleware"
 	"EazyStoreAPI/models"
 
 	"strings"
@@ -26,18 +27,64 @@ import (
 // @Success      200  {object} models.Debtor
 // @Failure      400  {object} map[string]string
 // @Router       /api/createDebtor [post]
+// isAllDigits ตรวจว่าข้อความเป็นตัวเลขล้วนหรือไม่ (ใช้ตรวจเบอร์โทรศัพท์)
+func isAllDigits(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return s != ""
+}
+
 func CreateDebtor(c *gin.Context) {
 	var input models.Debtor
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
+		return
+	}
+
+	// shop_id มาจาก body ต้องตรวจว่าเป็นร้านของ user จริง ไม่งั้นสร้างลูกหนี้ยัดร้านคนอื่นได้
+	if !middleware.RequireShopAccess(c, input.ShopID) {
+		return
+	}
+
+	// ตรวจสอบความครบถ้วนของข้อมูลฝั่งเซิร์ฟเวอร์ (กันกรณียิง API ตรงโดยไม่ผ่านหน้าจอ)
+	input.Name = strings.TrimSpace(input.Name)
+	input.Phone = strings.TrimSpace(input.Phone)
+	input.Address = strings.TrimSpace(input.Address)
+	input.ImgDebtor = strings.TrimSpace(input.ImgDebtor)
+
+	if input.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกชื่อคนค้างชำระ"})
+		return
+	}
+	if input.Phone == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกเบอร์โทรศัพท์"})
+		return
+	}
+	if len(input.Phone) != 10 || !isAllDigits(input.Phone) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก"})
+		return
+	}
+	if input.Address == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกที่อยู่ให้ครบถ้วน"})
+		return
+	}
+	if input.ImgDebtor == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาเพิ่มรูปภาพลูกหนี้"})
+		return
+	}
+	if input.CreditLimit <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกวงเงินค้างชำระให้มากกว่า 0 บาท"})
 		return
 	}
 
 	if err := database.DB.Create(&input).Error; err != nil {
 		// เช็คว่า Error คือเบอร์ซ้ำหรือไม่ (MySQL Error 1062)
 		if strings.Contains(err.Error(), "1062") || strings.Contains(err.Error(), "Duplicate entry") {
-			c.JSON(http.StatusConflict, gin.H{"error": "เบอร์โทรศัพท์นี้มีในระบบของร้านท่านแล้ว"})
+			c.JSON(http.StatusConflict, gin.H{"error": "เบอร์โทรศัพท์นี้มีในระบบของร้านแล้ว"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกได้"})
@@ -64,10 +111,13 @@ func CreateDebtor(c *gin.Context) {
 // @Failure      404  {object}  map[string]string "ไม่พบข้อมูลลูกหนี้"
 // @Router       /api/debtor/search [get]
 func GetDebtorBySearch(c *gin.Context) {
-	keyword := c.Query("keyword")
-	shopID := c.Query("shop_id")
+	shopID, ok := middleware.RequireShopIDQuery(c)
+	if !ok {
+		return
+	}
 
-	if keyword == "" || shopID == "" {
+	keyword := c.Query("keyword")
+	if keyword == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ keyword และ shop_id"})
 		return
 	}
@@ -103,15 +153,14 @@ func GetDebtorBySearch(c *gin.Context) {
 // @Failure      404  {object}  map[string]string "ไม่พบข้อมูลลูกหนี้"
 // @Router       /api/debtor [get]
 func GetDebtorByAll(c *gin.Context) {
-	shopID := c.Query("shop_id")
+	shopID, ok := middleware.RequireShopIDQuery(c)
+	if !ok {
+		return
+	}
+
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	search := c.Query("search") // เพิ่มค้นหาด้วย
-
-	if shopID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ shop_id"})
-		return
-	}
 
 	var debtors []models.Debtor
 	var totalItems int64
@@ -169,9 +218,17 @@ func GetDebtorHistory(c *gin.Context) {
 		return
 	}
 
-	// 1. ค้นหาข้อมูลลูกหนี้
+	shopIDs, err := middleware.GetShopIDsFromAuth(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบข้อมูลร้านค้าของผู้ใช้"})
+		return
+	}
+
+	// 1. ค้นหาข้อมูลลูกหนี้ (เฉพาะลูกหนี้ของร้านตัวเองเท่านั้น)
 	var debtor models.Debtor
-	if err := database.DB.First(&debtor, debtorID).Error; err != nil {
+	if err := database.DB.
+		Where("debtor_id = ? AND shop_id IN ?", debtorID, shopIDs).
+		First(&debtor).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลลูกหนี้"})
 		return
 	}
@@ -299,9 +356,17 @@ func UpdateDebtor(c *gin.Context) {
 	// 1. รับ ID ของลูกหนี้จาก URL Parameter
 	debtorID := c.Param("id")
 
-	// 2. ค้นหาลูกหนี้เดิมใน Database ว่ามีอยู่จริงไหม
+	shopIDs, err := middleware.GetShopIDsFromAuth(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบข้อมูลร้านค้าของผู้ใช้"})
+		return
+	}
+
+	// 2. ค้นหาลูกหนี้เดิมใน Database ว่ามีอยู่จริงไหม และเป็นลูกหนี้ของร้านตัวเองไหม
 	var debtor models.Debtor
-	if err := database.DB.First(&debtor, debtorID).Error; err != nil {
+	if err := database.DB.
+		Where("debtor_id = ? AND shop_id IN ?", debtorID, shopIDs).
+		First(&debtor).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลลูกหนี้รหัสนี้"})
 		return
 	}
@@ -309,7 +374,7 @@ func UpdateDebtor(c *gin.Context) {
 	// 3. รับข้อมูลที่ส่งมาแบบ Map (เพื่อทำ Partial Update)
 	var inputMap map[string]interface{}
 	if err := c.ShouldBindJSON(&inputMap); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "รูปแบบข้อมูลไม่ถูกต้อง: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "รูปแบบข้อมูลไม่ถูกต้อง"})
 		return
 	}
 
@@ -330,6 +395,44 @@ func UpdateDebtor(c *gin.Context) {
 		}
 	}
 
+	// 4.5 ตรวจสอบค่าที่ส่งมาแก้ไข ห้ามส่งค่าว่างมาทับข้อมูลเดิม (ข้อความแจ้งเป็นภาษาไทย)
+	if val, ok := updateData["name"]; ok {
+		name := strings.TrimSpace(fmt.Sprintf("%v", val))
+		if name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกชื่อคนค้างชำระ"})
+			return
+		}
+		updateData["name"] = name
+	}
+	if val, ok := updateData["phone"]; ok {
+		phone := strings.TrimSpace(fmt.Sprintf("%v", val))
+		if len(phone) != 10 || !isAllDigits(phone) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก"})
+			return
+		}
+		updateData["phone"] = phone
+	}
+	if val, ok := updateData["address"]; ok {
+		address := strings.TrimSpace(fmt.Sprintf("%v", val))
+		if address == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกที่อยู่ให้ครบถ้วน"})
+			return
+		}
+		updateData["address"] = address
+	}
+	if val, ok := updateData["credit_limit"]; ok {
+		limit, err := strconv.ParseFloat(fmt.Sprintf("%v", val), 64)
+		if err != nil || limit <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกวงเงินค้างชำระให้มากกว่า 0 บาท"})
+			return
+		}
+		if limit < debtor.CurrentDebt {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "วงเงินค้างชำระต้องไม่น้อยกว่ายอดหนี้คงค้างปัจจุบัน"})
+			return
+		}
+		updateData["credit_limit"] = limit
+	}
+
 	// ถ้าไม่ได้ส่งอะไรมาเปลี่ยนเลย ให้ตอบกลับไปเลยเพื่อประหยัดการทำงานของ DB
 	if len(updateData) == 0 {
 		c.JSON(http.StatusOK, gin.H{
@@ -346,7 +449,7 @@ func UpdateDebtor(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": "เบอร์โทรศัพท์นี้มีในระบบของร้านท่านแล้ว"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอัปเดตข้อมูลได้: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอัปเดตข้อมูลได้"})
 		return
 	}
 

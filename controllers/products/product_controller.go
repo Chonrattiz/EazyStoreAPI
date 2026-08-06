@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"EazyStoreAPI/middleware"
 	"EazyStoreAPI/models"
 
 	"github.com/gin-gonic/gin"
@@ -30,7 +31,13 @@ func CreateProduct(c *gin.Context) {
 	var input models.Product
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลสินค้าไม่ครบถ้วนหรือรูปแบบไม่ถูกต้อง"})
+		return
+	}
+
+	// shop_id มาจาก body ต้องตรวจว่าเป็นร้านของ user ที่ล็อกอินอยู่จริง
+	// ไม่งั้นจะสร้างสินค้ายัดเข้าร้านคนอื่นได้
+	if !middleware.RequireShopAccess(c, input.ShopID) {
 		return
 	}
 
@@ -80,7 +87,7 @@ func CreateProduct(c *gin.Context) {
 
 	// Insert into Database
 	if err := database.DB.Create(&input).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกสินค้าได้: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกสินค้าได้"})
 		return
 	}
 
@@ -138,14 +145,21 @@ func UpdateStock(c *gin.Context) {
 		return
 	}
 
+	shopIDs, err := middleware.GetShopIDsFromAuth(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบข้อมูลร้านค้าของผู้ใช้"})
+		return
+	}
+
 	//  อัปเดตแบบ "บวกเพิ่ม" (Atomic Update)
 	// ใช้ gorm.Expr("stock + ?", input.Stock) แทนการใส่ค่าตรงๆ
+	// shop_id ใน WHERE = กันเติมสต็อกสินค้าร้านอื่น (RowsAffected 0 ถ้าไม่ใช่ของร้านตัวเอง)
 	result := database.DB.Model(&models.Product{}).
-		Where("product_id = ?", productID).
+		Where("product_id = ? AND shop_id IN ?", productID, shopIDs).
 		Update("stock", gorm.Expr("stock + ?", input.Stock))
 
 	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "อัปเดตไม่สำเร็จ: " + result.Error.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "อัปเดตไม่สำเร็จ"})
 		return
 	}
 
@@ -181,9 +195,18 @@ func UpdateProduct(c *gin.Context) {
 	// 1. รับ ID จาก URL
 	productID := c.Param("id")
 
+	shopIDs, err := middleware.GetShopIDsFromAuth(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบข้อมูลร้านค้าของผู้ใช้"})
+		return
+	}
+
 	// 2. ค้นหาสินค้าเดิมก่อน (จำเป็นต้องมีค่าเดิมเพื่อเทียบราคาเก่า)
+	// ล็อค shop_id ด้วย เพื่อไม่ให้แก้ไขสินค้าของร้านอื่น
 	var product models.Product
-	if err := database.DB.First(&product, productID).Error; err != nil {
+	if err := database.DB.
+		Where("product_id = ? AND shop_id IN ?", productID, shopIDs).
+		First(&product).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบสินค้ารหัสนี้"})
 		return
 	}
@@ -192,7 +215,7 @@ func UpdateProduct(c *gin.Context) {
 	// การใช้ Map ช่วยให้รู้ว่า User ส่ง key ไหนมา ถ้าไม่ส่ง key ไหนมา map จะไม่มีค่านั้น
 	var inputMap map[string]interface{}
 	if err := c.ShouldBindJSON(&inputMap); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
 		return
 	}
 
@@ -213,6 +236,33 @@ func UpdateProduct(c *gin.Context) {
 	if len(updateData) == 0 {
 		c.JSON(http.StatusOK, gin.H{"message": "ไม่มีข้อมูลเปลี่ยนแปลง", "data": product})
 		return
+	}
+
+	// 4.5 เช็คบาร์โค้ดซ้ำในร้านเดียวกัน (ไม่นับตัวสินค้าเอง)
+	if val, ok := updateData["barcode"]; ok {
+		barcode := ""
+		if val != nil {
+			barcode = strings.TrimSpace(fmt.Sprintf("%v", val))
+		}
+
+		if barcode == "" {
+			// ส่งค่าว่างมา = ตั้งใจล้างบาร์โค้ดออก เก็บเป็น NULL
+			updateData["barcode"] = nil
+		} else {
+			var count int64
+			database.DB.Model(&models.Product{}).
+				Where("shop_id = ? AND barcode = ? AND product_id <> ?",
+					product.ShopID, barcode, product.ProductID).
+				Count(&count)
+
+			if count > 0 {
+				c.JSON(http.StatusConflict, gin.H{
+					"error": "บาร์โค้ดนี้ถูกใช้กับสินค้าอื่นในร้านนี้แล้ว กรุณาตรวจสอบอีกครั้ง",
+				})
+				return
+			}
+			updateData["barcode"] = barcode
+		}
 	}
 
 	// ---------------------------------------------------------
@@ -256,7 +306,7 @@ func UpdateProduct(c *gin.Context) {
 	// GORM จะอัปเดตเฉพาะคอลัมน์ที่มีใน map updateData เท่านั้น
 	// คอลัมน์ไหนไม่อยู่ใน map จะคงค่าเดิมไว้ (Partial Update สมบูรณ์แบบ)
 	if err := database.DB.Model(&product).Updates(updateData).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "แก้ไขข้อมูลไม่สำเร็จ: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "แก้ไขข้อมูลไม่สำเร็จ"})
 		return
 	}
 
@@ -286,9 +336,18 @@ func UpdateProduct(c *gin.Context) {
 func DeleteProduct(c *gin.Context) {
 	productID := c.Param("id")
 
-	// 1. ตรวจสอบว่ามีสินค้านี้อยู่จริงไหม
+	shopIDs, err := middleware.GetShopIDsFromAuth(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบข้อมูลร้านค้าของผู้ใช้"})
+		return
+	}
+
+	// 1. ตรวจสอบว่ามีสินค้านี้อยู่จริงไหม "และเป็นของร้านตัวเองไหม"
+	// คืน 404 (ไม่ใช่ 403) เมื่อเป็นสินค้าร้านอื่น เพื่อไม่ให้รู้ว่า id นั้นมีอยู่จริง
 	var product models.Product
-	if err := database.DB.First(&product, productID).Error; err != nil {
+	if err := database.DB.
+		Where("product_id = ? AND shop_id IN ?", productID, shopIDs).
+		First(&product).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบสินค้ารหัสนี้"})
 		return
 	}
@@ -300,7 +359,7 @@ func DeleteProduct(c *gin.Context) {
 	if count > 0 {
 		// กรณีที่ 1: เคยถูกขายไปแล้ว -> ห้ามลบทิ้ง! ให้ทำ Soft Delete (อัปเดต status = false)
 		if err := database.DB.Model(&product).Update("status", false).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถเปลี่ยนสถานะสินค้าได้: " + err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถเปลี่ยนสถานะสินค้าได้"})
 			return
 		}
 
@@ -313,7 +372,7 @@ func DeleteProduct(c *gin.Context) {
 
 	// กรณีที่ 2: ยังไม่เคยถูกขายเลย (สร้างผิด) -> ลบทิ้งจากฐานข้อมูลได้เลย (Hard Delete)
 	if err := database.DB.Delete(&product).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบสินค้าได้: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบสินค้าได้"})
 		return
 	}
 

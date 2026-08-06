@@ -24,12 +24,30 @@ func CreateShop(c *gin.Context) {
 	var input models.Shop
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลร้านค้าไม่ครบถ้วนหรือรูปแบบไม่ถูกต้อง"})
+		return
+	}
+
+	// เจ้าของร้านต้องเป็น user จาก token เท่านั้น ไม่งั้นสร้างร้านยัดใส่บัญชีคนอื่นได้
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบข้อมูลยืนยันตัวตน (กรุณา Login)"})
+		return
+	}
+
+	var userID int
+	switch v := userIDValue.(type) {
+	case float64:
+		userID = int(v)
+	case int:
+		userID = v
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "รูปแบบ UserID ไม่ถูกต้อง"})
 		return
 	}
 
 	shop := models.Shop{
-		UserID:    input.UserID,
+		UserID:    userID,
 		Name:      input.Name,
 		Phone:     input.Phone,
 		Address:   input.Address,
@@ -39,7 +57,7 @@ func CreateShop(c *gin.Context) {
 	}
 
 	if err := database.DB.Create(&shop).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกร้านค้าได้: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกร้านค้าได้ กรุณาลองใหม่อีกครั้ง"})
 		return
 	}
 
@@ -63,7 +81,7 @@ func CreateShop(c *gin.Context) {
 func GetShopByUser(c *gin.Context) {
 	userId, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "กรุณาเข้าสู่ระบบก่อนใช้งาน"})
 		return
 	}
 
@@ -72,13 +90,13 @@ func GetShopByUser(c *gin.Context) {
 	result := database.DB.Where("user_id = ?", userId).Find(&shops)
 
 	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลร้านค้าได้"})
 		return
 	}
 
 	// เช็คว่ามีร้านไหม (Optional: ถ้าอยากให้ return 404 เมื่อไม่มีร้านเลย)
 	if len(shops) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"message": "No shops found", "data": []string{}})
+		c.JSON(http.StatusNotFound, gin.H{"message": "ไม่พบข้อมูลร้านค้า", "data": []string{}})
 		return
 	}
 
@@ -102,7 +120,7 @@ func DeleteShop(c *gin.Context) {
 
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: ไม่พบข้อมูลผู้ใช้"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบข้อมูลผู้ใช้ กรุณาเข้าสู่ระบบใหม่"})
 		return
 	}
 
@@ -111,7 +129,7 @@ func DeleteShop(c *gin.Context) {
 
 	//เช็ค Error จาก Database
 	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบร้านค้าได้ กรุณาลองใหม่อีกครั้ง"})
 		return
 	}
 
@@ -150,7 +168,7 @@ func UpdateShop(c *gin.Context) {
 	// 2. รับข้อมูล (Partial Update)
 	var input models.UpdateShopInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "รูปแบบข้อมูลที่ส่งมาไม่ถูกต้อง"})
 		return
 	}
 

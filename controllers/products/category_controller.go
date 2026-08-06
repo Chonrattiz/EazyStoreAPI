@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"EazyStoreAPI/database"
+	"EazyStoreAPI/middleware"
 	"EazyStoreAPI/models"
 	"net/http"
 	"strconv"
@@ -21,10 +22,13 @@ func CreateCategory(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุชื่อหมวดหมู่"})
 		return
 	}
+	if !middleware.RequireShopAccess(c, input.ShopID) {
+		return
+	}
 
 	category := models.Category{ShopID: input.ShopID, Name: input.Name, Status: true}
 	if err := database.DB.Create(&category).Error; err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "ไม่สามารถเพิ่มหมวดหมู่ได้: " + err.Error()})
+		c.JSON(http.StatusConflict, gin.H{"error": "ไม่สามารถเพิ่มหมวดหมู่ได้"})
 		return
 	}
 	c.JSON(http.StatusCreated, category)
@@ -46,12 +50,15 @@ func UpdateCategory(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุชื่อหมวดหมู่"})
 		return
 	}
+	if !middleware.RequireShopAccess(c, input.ShopID) {
+		return
+	}
 
 	result := database.DB.Model(&models.Category{}).
 		Where("category_id = ? AND shop_id = ? AND status = ?", categoryID, input.ShopID, true).
 		Update("name", input.Name)
 	if result.Error != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "ไม่สามารถแก้ไขหมวดหมู่ได้: " + result.Error.Error()})
+		c.JSON(http.StatusConflict, gin.H{"error": "ไม่สามารถแก้ไขหมวดหมู่ได้"})
 		return
 	}
 	if result.RowsAffected == 0 {
@@ -66,6 +73,9 @@ func DeleteCategory(c *gin.Context) {
 	shopID, shopErr := strconv.Atoi(c.Query("shop_id"))
 	if err != nil || categoryID <= 0 || shopErr != nil || shopID <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ category_id และ shop_id ที่ถูกต้อง"})
+		return
+	}
+	if !middleware.RequireShopAccess(c, shopID) {
 		return
 	}
 
@@ -84,14 +94,8 @@ func DeleteCategory(c *gin.Context) {
 }
 
 func GetInactiveCategories(c *gin.Context) {
-	shopIDStr := c.Query("shop_id")
-	if shopIDStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ shop_id"})
-		return
-	}
-	shopID, err := strconv.Atoi(shopIDStr)
-	if err != nil || shopID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "shop_id ไม่ถูกต้อง"})
+	shopID, ok := middleware.RequireShopIDQuery(c)
+	if !ok {
 		return
 	}
 
@@ -116,6 +120,9 @@ func RestoreCategory(c *gin.Context) {
 	var input models.RestoreCategoryInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ shop_id"})
+		return
+	}
+	if !middleware.RequireShopAccess(c, input.ShopID) {
 		return
 	}
 
@@ -178,6 +185,9 @@ func MoveCategoryProducts(c *gin.Context) {
 	}
 	if input.TargetCategoryID == sourceCategoryID {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่สามารถย้ายสินค้าไปหมวดหมู่เดิมได้"})
+		return
+	}
+	if !middleware.RequireShopAccess(c, input.ShopID) {
 		return
 	}
 

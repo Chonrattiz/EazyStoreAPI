@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"EazyStoreAPI/middleware"
 	"EazyStoreAPI/models"
 
 	"github.com/gin-gonic/gin"
@@ -37,21 +38,15 @@ func thaiSortKey(input string) string {
 
 // GetCategories ดึงหมวดหมู่ของร้านที่ระบุ (ต้องส่ง shop_id มา)
 func GetCategories(c *gin.Context) {
-	shopIDStr := c.Query("shop_id")
-	if shopIDStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ shop_id"})
-		return
-	}
-	shopID, err := strconv.Atoi(shopIDStr)
-	if err != nil || shopID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "shop_id ไม่ถูกต้อง"})
+	shopID, ok := middleware.RequireShopIDQuery(c)
+	if !ok {
 		return
 	}
 
 	var categories []models.Category
 
 	if err := database.DB.Where("shop_id = ? AND status = ?", shopID, true).Order("category_id ASC").Find(&categories).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลหมวดหมู่ได้: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลหมวดหมู่ได้"})
 		return
 	}
 
@@ -75,7 +70,11 @@ func GetCategories(c *gin.Context) {
 // @Failure      500  {object}  map[string]string "ไม่สามารถดึงข้อมูลสินค้าได้"
 // @Router       /api/products [get]
 func GetProductsByShop(c *gin.Context) {
-	shopID := c.Query("shop_id")
+	shopID, ok := middleware.RequireShopIDQuery(c)
+	if !ok {
+		return
+	}
+
 	search := c.Query("search")
 	categoryID := c.Query("category_id")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1")) // เปลี่ยน default เป็น 1
@@ -83,11 +82,6 @@ func GetProductsByShop(c *gin.Context) {
 
 	// ✨ เพิ่มการรับค่าการเรียงลำดับจาก App (เช่น asc หรือ desc)
 	sortOrder := c.DefaultQuery("sort", "desc")
-
-	if shopID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ shop_id"})
-		return
-	}
 
 	var products []models.Product
 	var totalItems int64
@@ -175,12 +169,15 @@ func GetProductsByShop(c *gin.Context) {
 // @Failure      404  {object}  map[string]string "Product not found"
 // @Router       /api/product/search [get]
 func GetProductBySearch(c *gin.Context) {
-	// 1. รับค่า keyword และ shop_id
-	keyword := c.Query("keyword")
-	shopID := c.Query("shop_id") // ✅ เพิ่มการรับค่า shop_id
+	// 1. รับค่า shop_id พร้อมตรวจสิทธิ์ว่าเป็นร้านของ user ที่ล็อกอินอยู่
+	shopID, ok := middleware.RequireShopIDQuery(c)
+	if !ok {
+		return
+	}
 
-	// 2. ตรวจสอบว่าส่งมาครบไหม
-	if keyword == "" || shopID == "" {
+	// 2. ตรวจสอบว่าส่ง keyword มาไหม
+	keyword := c.Query("keyword")
+	if keyword == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุคำค้นหา และ รหัสร้านค้า"})
 		return
 	}
@@ -216,13 +213,12 @@ func GetProductBySearch(c *gin.Context) {
 // @Failure      500  {object}  map[string]string "Internal Error"
 // @Router       /api/getNullBarcode [get]
 func GetNullBarcode(c *gin.Context) {
-	shopID := c.Query("shop_id")
-	categoryID := c.Query("category_id")
-
-	if shopID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุ shop_id"})
+	shopID, ok := middleware.RequireShopIDQuery(c)
+	if !ok {
 		return
 	}
+
+	categoryID := c.Query("category_id")
 
 	var products []models.Product
 	query := database.DB.Where("shop_id = ? AND barcode IS NULL", shopID)
@@ -235,7 +231,7 @@ func GetNullBarcode(c *gin.Context) {
 	err := query.Order("category_id ASC").Find(&products).Error
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ดึงข้อมูลล้มเหลว: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ดึงข้อมูลล้มเหลว"})
 		return
 	}
 
