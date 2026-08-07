@@ -46,6 +46,18 @@ func Register(c *gin.Context) {
 	var existingUser models.User
 	result := database.DB.Where("email = ? OR phone = ?", input.Email, input.Phone).First(&existingUser)
 
+	// เช็คว่า Username ซ้ำกับคนอื่นไหม (ยกเว้นแถวเดิมของตัวเองกรณี resume การสมัครที่ยังไม่ยืนยัน)
+	var usernameCount int64
+	usernameQuery := database.DB.Model(&models.User{}).Where("username = ?", input.Username)
+	if result.Error == nil {
+		usernameQuery = usernameQuery.Where("user_id <> ?", existingUser.UserID)
+	}
+	usernameQuery.Count(&usernameCount)
+	if usernameCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "ชื่อผู้ใช้งาน (Username) นี้มีคนใช้แล้ว"})
+		return
+	}
+
 	if result.Error == nil {
 
 		if existingUser.IsVerified {
@@ -204,7 +216,7 @@ func Login(c *gin.Context) {
 
 	var user models.User
 	// ข้อความ Error แบบกลางเพื่อความปลอดภัย (User Enumeration Protection)
-	invalidMsg := "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง"
+	invalidMsg := "อีเมล/เบอร์โทรศัพท์หรือรหัสผ่านไม่ถูกต้อง"
 
 	// 2. ค้นหาผู้ใช้งานด้วย Email หรือเบอร์โทรศัพท์
 	if err := database.DB.Where("email = ? OR phone = ?", input.Username, input.Username).First(&user).Error; err != nil {

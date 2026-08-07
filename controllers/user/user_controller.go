@@ -65,13 +65,6 @@ func UpdateProfile(c *gin.Context) {
 	if val, ok := inputMap["username"]; ok {
 		newUsername := val.(string)
 		if newUsername != "" && newUsername != user.Username {
-			// เช็คว่า Username ซ้ำไหม
-			var count int64
-			database.DB.Model(&models.User{}).Where("username = ?", newUsername).Count(&count)
-			if count > 0 {
-				c.JSON(http.StatusConflict, gin.H{"error": "ชื่อผู้ใช้งาน (Username) นี้มีคนใช้แล้ว"})
-				return
-			}
 			updateData["username"] = newUsername
 		}
 	}
