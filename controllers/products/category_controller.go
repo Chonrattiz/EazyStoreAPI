@@ -26,6 +26,15 @@ func CreateCategory(c *gin.Context) {
 		return
 	}
 
+	var duplicateCount int64
+	database.DB.Model(&models.Category{}).
+		Where("shop_id = ? AND name = ?", input.ShopID, input.Name).
+		Count(&duplicateCount)
+	if duplicateCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "มีหมวดหมู่ชื่อ \"" + input.Name + "\" อยู่แล้ว"})
+		return
+	}
+
 	category := models.Category{ShopID: input.ShopID, Name: input.Name, Status: true}
 	if err := database.DB.Create(&category).Error; err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "ไม่สามารถเพิ่มหมวดหมู่ได้"})
@@ -51,6 +60,15 @@ func UpdateCategory(c *gin.Context) {
 		return
 	}
 	if !middleware.RequireShopAccess(c, input.ShopID) {
+		return
+	}
+
+	var duplicateCount int64
+	database.DB.Model(&models.Category{}).
+		Where("shop_id = ? AND name = ? AND category_id <> ?", input.ShopID, input.Name, categoryID).
+		Count(&duplicateCount)
+	if duplicateCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "มีหมวดหมู่ชื่อ \"" + input.Name + "\" อยู่แล้ว"})
 		return
 	}
 
