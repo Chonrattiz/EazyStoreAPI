@@ -169,11 +169,28 @@ func GetAdvancedReport(c *gin.Context) {
 		Scan(&debtSummary.CollectedThisMonth)
 
 	// 5. Aging Report (from sales that are unpaid)
-	// Remaining balance per sale is derived with a FIFO waterfall: debt_payments are
+	// Remaining balance is derived with a FIFO waterfall: debt_payments are
 	// recorded per-debtor (not per-sale), so total payments are applied against a
 	// debtor's oldest sales first via a running cumulative-debt window function.
 	// This keeps aging amounts in sync when a debtor pays off older debts later,
 	// instead of relying on the never-updated sales.pay column.
+	//
+	// Aging is tracked per DEBTOR (not per individual sale/bill): since a repayment
+	// can't be tied to a specific bill, "age" is reset to the debtor's most recent
+	// payment date whenever they pay anything (even partially). If they haven't paid
+	// since their oldest still-open bill was created, age falls back to that bill's
+	// date. GREATEST() picks whichever is more recent, so a brand-new bill created
+	// after an old, unrelated payment still ages from its own date, not the stale
+	// payment. All date comparisons are wrapped in DATE() because debt_payments.payment_date
+	// stores a full timestamp — comparing it raw against a date-only asOfDate string would
+	// silently exclude same-day payments made after midnight until the next calendar day.
+	//
+	// "Most recent payment" only counts payments made since the debtor's current debt
+	// cycle started: debt_events/running_balance/cycle_start replay the debtor's full
+	// history (every debt-creating sale as +delta, every payment as -delta) in
+	// chronological order to find the last time their balance fully returned to zero.
+	// Payments made before that "closing" point belong to an already-settled cycle and
+	// must not reset the aging clock for a brand-new, unrelated debt taken on afterward.
 	//
 	// Aging always reflects real-time status "as of today", regardless of which
 	// month/year the report page's period picker is set to — it is not a historical
@@ -203,22 +220,77 @@ func GetAdvancedReport(c *gin.Context) {
 			SELECT dp.debtor_id, SUM(dp.amount_paid) AS total_paid
 			FROM debt_payments dp
 			JOIN debtors d ON d.debtor_id = dp.debtor_id
-			WHERE d.shop_id = ? AND dp.payment_date <= ?
+			WHERE d.shop_id = ? AND DATE(dp.payment_date) <= ?
 			GROUP BY dp.debtor_id
 		),
 		remaining_per_sale AS (
 			SELECT
-				sd.created_at,
+				sd.debtor_id, sd.created_at,
 				GREATEST(0, LEAST(sd.original_debt, sd.cumulative_debt - COALESCE(p.total_paid, 0))) AS remaining
 			FROM sale_debts sd
 			LEFT JOIN debtor_paid p ON p.debtor_id = sd.debtor_id
+		),
+		debtor_totals AS (
+			SELECT
+				r.debtor_id,
+				SUM(r.remaining) AS amount_owed,
+				MIN(CASE WHEN r.remaining > 0 THEN r.created_at END) AS oldest_open_sale_date
+			FROM remaining_per_sale r
+			GROUP BY r.debtor_id
+			HAVING SUM(r.remaining) > 0
+		),
+		debt_events AS (
+			SELECT s.debtor_id, s.created_at AS event_date, 1 AS event_order, (s.net_price - s.pay) AS delta
+			FROM sales s
+			WHERE s.shop_id = ? AND s.debtor_id IS NOT NULL AND s.created_at <= ?
+				AND (s.pay < s.net_price OR s.payment_method = 'ค้างชำระ')
+			UNION ALL
+			SELECT d.debtor_id, DATE(dp.payment_date) AS event_date, 2 AS event_order, -dp.amount_paid AS delta
+			FROM debt_payments dp JOIN debtors d ON d.debtor_id = dp.debtor_id
+			WHERE d.shop_id = ? AND DATE(dp.payment_date) <= ?
+		),
+		running_balance AS (
+			SELECT debtor_id, event_date,
+				SUM(delta) OVER (PARTITION BY debtor_id ORDER BY event_date, event_order) AS balance
+			FROM debt_events
+		),
+		cycle_start AS (
+			SELECT debtor_id, MAX(event_date) AS cycle_start_date
+			FROM running_balance
+			WHERE balance <= 0
+			GROUP BY debtor_id
+		),
+		debtor_paid_in_cycle AS (
+			SELECT dp.debtor_id, MAX(DATE(dp.payment_date)) AS last_payment_date
+			FROM debt_payments dp
+			JOIN debtors d ON d.debtor_id = dp.debtor_id
+			LEFT JOIN cycle_start cs ON cs.debtor_id = dp.debtor_id
+			WHERE d.shop_id = ? AND DATE(dp.payment_date) <= ?
+				AND DATE(dp.payment_date) >= COALESCE(cs.cycle_start_date, '1900-01-01')
+			GROUP BY dp.debtor_id
+		),
+		debtor_aging AS (
+			SELECT
+				t.debtor_id,
+				t.amount_owed,
+				GREATEST(
+					COALESCE(p.last_payment_date, t.oldest_open_sale_date),
+					t.oldest_open_sale_date
+				) AS debt_since
+			FROM debtor_totals t
+			LEFT JOIN debtor_paid_in_cycle p ON p.debtor_id = t.debtor_id
 		)
 		SELECT
-			COALESCE(SUM(CASE WHEN DATEDIFF(?, created_at) + 1 <= 15 THEN remaining ELSE 0 END), 0) as safe,
-			COALESCE(SUM(CASE WHEN DATEDIFF(?, created_at) + 1 BETWEEN 16 AND 30 THEN remaining ELSE 0 END), 0) as warning,
-			COALESCE(SUM(CASE WHEN DATEDIFF(?, created_at) + 1 > 30 THEN remaining ELSE 0 END), 0) as danger
-		FROM remaining_per_sale
-	`, shopID, asOfDate, shopID, asOfDate, asOfDate, asOfDate, asOfDate).Scan(&aging)
+			COALESCE(SUM(CASE WHEN DATEDIFF(?, debt_since) + 1 <= 15 THEN amount_owed ELSE 0 END), 0) as safe,
+			COALESCE(SUM(CASE WHEN DATEDIFF(?, debt_since) + 1 BETWEEN 16 AND 30 THEN amount_owed ELSE 0 END), 0) as warning,
+			COALESCE(SUM(CASE WHEN DATEDIFF(?, debt_since) + 1 > 30 THEN amount_owed ELSE 0 END), 0) as danger
+		FROM debtor_aging
+	`, shopID, asOfDate, // sale_debts
+		shopID, asOfDate, // debtor_paid
+		shopID, asOfDate, shopID, asOfDate, // debt_events
+		shopID, asOfDate, // debtor_paid_in_cycle
+		asOfDate, asOfDate, asOfDate, // final SELECT
+	).Scan(&aging)
 
 	// 6. Top 5 Debtors
 	type TopDebtor struct {
@@ -263,11 +335,12 @@ func GetAdvancedReport(c *gin.Context) {
 	})
 }
 
-// GetAgingReportDetail returns the individual bills behind each aging bucket
+// GetAgingReportDetail returns the debtors behind each aging bucket
 // (safe/warning/danger) shown in GetAdvancedReport's "aging_report" totals, so
 // the UI can drill into "who owes what" per bucket. Reuses the exact same
-// FIFO-waterfall remaining-balance logic (sale_debts/debtor_paid/remaining_per_sale)
-// so SUM(amount_owed) per bucket here reconciles with aging_report.safe/warning/danger.
+// per-debtor FIFO-waterfall + debt_since logic as GetAdvancedReport's aging
+// section so SUM(amount_owed) per bucket here reconciles with
+// aging_report.safe/warning/danger.
 func GetAgingReportDetail(c *gin.Context) {
 	shopID, ok := middleware.RequireShopIDQuery(c)
 	if !ok {
@@ -280,13 +353,12 @@ func GetAgingReportDetail(c *gin.Context) {
 		return
 	}
 
-	type AgingBill struct {
-		SaleID      int     `json:"sale_id"`
+	type AgingDebtor struct {
 		DebtorID    int     `json:"debtor_id"`
 		Name        string  `json:"name"`
 		Phone       string  `json:"phone"`
 		ImgDebtor   string  `json:"img_debtor"`
-		SaleDate    string  `json:"sale_date"`
+		DebtSince   string  `json:"debt_since"`
 		AmountOwed  float64 `json:"amount_owed"`
 		DaysOverdue int     `json:"days_overdue"`
 		Bucket      string  `json:"-"`
@@ -296,7 +368,7 @@ func GetAgingReportDetail(c *gin.Context) {
 	// asOfDate comment in GetAdvancedReport.
 	asOfDate := time.Now().Format("2006-01-02")
 
-	var bills []AgingBill
+	var debtors []AgingDebtor
 	database.DB.Raw(`
 		WITH sale_debts AS (
 			SELECT
@@ -315,36 +387,90 @@ func GetAgingReportDetail(c *gin.Context) {
 			SELECT dp.debtor_id, SUM(dp.amount_paid) AS total_paid
 			FROM debt_payments dp
 			JOIN debtors d ON d.debtor_id = dp.debtor_id
-			WHERE d.shop_id = ? AND dp.payment_date <= ?
+			WHERE d.shop_id = ? AND DATE(dp.payment_date) <= ?
 			GROUP BY dp.debtor_id
 		),
 		remaining_per_sale AS (
 			SELECT
-				sd.sale_id, sd.debtor_id, sd.created_at,
+				sd.debtor_id, sd.created_at,
 				GREATEST(0, LEAST(sd.original_debt, sd.cumulative_debt - COALESCE(p.total_paid, 0))) AS remaining
 			FROM sale_debts sd
 			LEFT JOIN debtor_paid p ON p.debtor_id = sd.debtor_id
+		),
+		debtor_totals AS (
+			SELECT
+				r.debtor_id,
+				SUM(r.remaining) AS amount_owed,
+				MIN(CASE WHEN r.remaining > 0 THEN r.created_at END) AS oldest_open_sale_date
+			FROM remaining_per_sale r
+			GROUP BY r.debtor_id
+			HAVING SUM(r.remaining) > 0
+		),
+		debt_events AS (
+			SELECT s.debtor_id, s.created_at AS event_date, 1 AS event_order, (s.net_price - s.pay) AS delta
+			FROM sales s
+			WHERE s.shop_id = ? AND s.debtor_id IS NOT NULL AND s.created_at <= ?
+				AND (s.pay < s.net_price OR s.payment_method = 'ค้างชำระ')
+			UNION ALL
+			SELECT d.debtor_id, DATE(dp.payment_date) AS event_date, 2 AS event_order, -dp.amount_paid AS delta
+			FROM debt_payments dp JOIN debtors d ON d.debtor_id = dp.debtor_id
+			WHERE d.shop_id = ? AND DATE(dp.payment_date) <= ?
+		),
+		running_balance AS (
+			SELECT debtor_id, event_date,
+				SUM(delta) OVER (PARTITION BY debtor_id ORDER BY event_date, event_order) AS balance
+			FROM debt_events
+		),
+		cycle_start AS (
+			SELECT debtor_id, MAX(event_date) AS cycle_start_date
+			FROM running_balance
+			WHERE balance <= 0
+			GROUP BY debtor_id
+		),
+		debtor_paid_in_cycle AS (
+			SELECT dp.debtor_id, MAX(DATE(dp.payment_date)) AS last_payment_date
+			FROM debt_payments dp
+			JOIN debtors d ON d.debtor_id = dp.debtor_id
+			LEFT JOIN cycle_start cs ON cs.debtor_id = dp.debtor_id
+			WHERE d.shop_id = ? AND DATE(dp.payment_date) <= ?
+				AND DATE(dp.payment_date) >= COALESCE(cs.cycle_start_date, '1900-01-01')
+			GROUP BY dp.debtor_id
+		),
+		debtor_aging AS (
+			SELECT
+				t.debtor_id,
+				t.amount_owed,
+				GREATEST(
+					COALESCE(p.last_payment_date, t.oldest_open_sale_date),
+					t.oldest_open_sale_date
+				) AS debt_since
+			FROM debtor_totals t
+			LEFT JOIN debtor_paid_in_cycle p ON p.debtor_id = t.debtor_id
 		)
 		SELECT
-			r.sale_id, r.debtor_id, d.name, d.phone, d.img_debtor,
-			r.created_at AS sale_date,
-			r.remaining AS amount_owed,
-			DATEDIFF(?, r.created_at) + 1 AS days_overdue,
+			a.debtor_id, d.name, d.phone, d.img_debtor,
+			a.debt_since,
+			a.amount_owed,
+			DATEDIFF(?, a.debt_since) + 1 AS days_overdue,
 			CASE
-				WHEN DATEDIFF(?, r.created_at) + 1 <= 15 THEN 'safe'
-				WHEN DATEDIFF(?, r.created_at) + 1 BETWEEN 16 AND 30 THEN 'warning'
+				WHEN DATEDIFF(?, a.debt_since) + 1 <= 15 THEN 'safe'
+				WHEN DATEDIFF(?, a.debt_since) + 1 BETWEEN 16 AND 30 THEN 'warning'
 				ELSE 'danger'
 			END AS bucket
-		FROM remaining_per_sale r
-		JOIN debtors d ON d.debtor_id = r.debtor_id
-		WHERE r.remaining > 0
+		FROM debtor_aging a
+		JOIN debtors d ON d.debtor_id = a.debtor_id
 		ORDER BY days_overdue DESC, d.name
-	`, shopID, asOfDate, shopID, asOfDate, asOfDate, asOfDate, asOfDate).Scan(&bills)
+	`, shopID, asOfDate, // sale_debts
+		shopID, asOfDate, // debtor_paid
+		shopID, asOfDate, shopID, asOfDate, // debt_events
+		shopID, asOfDate, // debtor_paid_in_cycle
+		asOfDate, asOfDate, asOfDate, // final SELECT
+	).Scan(&debtors)
 
-	safe := []AgingBill{}
-	warning := []AgingBill{}
-	danger := []AgingBill{}
-	for _, b := range bills {
+	safe := []AgingDebtor{}
+	warning := []AgingDebtor{}
+	danger := []AgingDebtor{}
+	for _, b := range debtors {
 		switch b.Bucket {
 		case "safe":
 			safe = append(safe, b)
