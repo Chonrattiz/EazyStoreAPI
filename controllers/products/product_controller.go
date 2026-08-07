@@ -371,7 +371,20 @@ func DeleteProduct(c *gin.Context) {
 	}
 
 	// กรณีที่ 2: ยังไม่เคยถูกขายเลย (สร้างผิด) -> ลบทิ้งจากฐานข้อมูลได้เลย (Hard Delete)
+	// ต้องลบ log ประวัติราคาที่ผูก FK กับสินค้านี้ก่อน ไม่งั้น MySQL จะ block การลบด้วย foreign key constraint
+	if err := database.DB.Exec("DELETE FROM sell_price_logs WHERE product_id = ?", productID).Error; err != nil {
+		fmt.Println("DeleteProduct - Database Error deleting sell_price_logs:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบสินค้าได้"})
+		return
+	}
+	if err := database.DB.Exec("DELETE FROM cost_price_logs WHERE product_id = ?", productID).Error; err != nil {
+		fmt.Println("DeleteProduct - Database Error deleting cost_price_logs:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบสินค้าได้"})
+		return
+	}
+
 	if err := database.DB.Delete(&product).Error; err != nil {
+		fmt.Println("DeleteProduct - Database Error deleting product:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบสินค้าได้"})
 		return
 	}
