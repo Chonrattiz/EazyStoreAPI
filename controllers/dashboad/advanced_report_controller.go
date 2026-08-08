@@ -154,12 +154,13 @@ func GetAdvancedReport(c *gin.Context) {
 	var debtSummary struct {
 		TotalOutstanding float64 `json:"total_outstanding"`
 		CollectedThisMonth float64 `json:"collected_this_month"`
+		DebtorCount int64 `json:"debtor_count"`
 	}
-	// Total Outstanding Debt across all debtors
+	// Total Outstanding Debt + count of debtors currently owing (across all debtors)
 	database.DB.Table("debtors").
-		Select("COALESCE(SUM(current_debt), 0) as total_outstanding").
+		Select("COALESCE(SUM(current_debt), 0) as total_outstanding, COUNT(CASE WHEN current_debt > 0 THEN 1 END) as debtor_count").
 		Where("shop_id = ?", shopID).
-		Scan(&debtSummary.TotalOutstanding)
+		Scan(&debtSummary)
 
 	// Collected this period (uses the selected start and end dates)
 	database.DB.Table("debt_payments").
