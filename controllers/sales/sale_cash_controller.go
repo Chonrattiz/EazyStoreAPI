@@ -4,6 +4,7 @@ import (
 	"EazyStoreAPI/database"
 	"EazyStoreAPI/middleware"
 	"EazyStoreAPI/models"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -79,17 +80,17 @@ func CreateSale(c *gin.Context) {
 	// 4. วนลูปบันทึกลงตาราง sale_items
 	for _, item := range input.SaleItems {
 		// สินค้าทุกชิ้นในบิลต้องเป็นสินค้าของร้านนี้ ไม่งั้นจะขาย (และตัดสต็อก) สินค้าร้านอื่นได้
-		var productCount int64
-		if err := tx.Model(&models.Product{}).
-			Where("product_id = ? AND shop_id = ?", item.ProductID, input.ShopID).
-			Count(&productCount).Error; err != nil {
-			tx.Rollback()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถตรวจสอบสินค้าได้"})
-			return
-		}
-		if productCount == 0 {
+		var product models.Product
+		if err := tx.Where("product_id = ? AND shop_id = ?", item.ProductID, input.ShopID).First(&product).Error; err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusBadRequest, gin.H{"error": "พบสินค้าที่ไม่ใช่ของร้านนี้ในรายการขาย"})
+			return
+		}
+
+		// เช็คว่าสต๊อกพอขายหรือไม่ ก่อนตัดสต็อก (มาตรฐานเดียวกับฝั่งขายเชื่อ)
+		if product.Stock < item.Amount {
+			tx.Rollback()
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("สินค้า '%s' มีสต๊อกไม่พอ (คงเหลือ %d ชิ้น, ต้องการ %d ชิ้น)", product.Name, product.Stock, item.Amount)})
 			return
 		}
 
@@ -107,7 +108,7 @@ func CreateSale(c *gin.Context) {
 			return
 		}
 
-		// 5. ตัดสต็อกสินค้า (Optional แนะนำให้ทำ)
+		// 5. ตัดสต็อกสินค้า (ผ่านการเช็คสต๊อกพอแล้วด้านบน)
 		if err := tx.Table("products").Where("product_id = ? AND shop_id = ?", item.ProductID, input.ShopID).
 			UpdateColumn("stock", database.DB.Raw("stock - ?", item.Amount)).Error; err != nil {
 			tx.Rollback()
