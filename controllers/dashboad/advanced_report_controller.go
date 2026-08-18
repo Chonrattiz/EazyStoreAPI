@@ -139,7 +139,7 @@ func GetAdvancedReport(c *gin.Context) {
 	asOfDate := time.Now().Format("2006-01-02")
 	var aging models.AgingStats
 	database.DB.Raw(`
-		WITH sale_debts AS (
+		WITH sale_debts AS (  
 			SELECT
 				s.sale_id, s.debtor_id, s.created_at,
 				(s.net_price - s.pay) AS original_debt,
@@ -223,7 +223,8 @@ func GetAdvancedReport(c *gin.Context) {
 		FROM debtor_aging
 	`, shopID, asOfDate, // sale_debts
 		shopID, asOfDate, // debtor_paid
-		shopID, asOfDate, shopID, asOfDate, // debt_events
+		shopID, asOfDate, 
+		shopID, asOfDate, // debt_events
 		shopID, asOfDate, // debtor_paid_in_cycle
 		asOfDate, asOfDate, asOfDate, // final SELECT
 	).Scan(&aging)
