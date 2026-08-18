@@ -35,8 +35,6 @@ func CreateProduct(c *gin.Context) {
 		return
 	}
 
-	// shop_id มาจาก body ต้องตรวจว่าเป็นร้านของ user ที่ล็อกอินอยู่จริง
-	// ไม่งั้นจะสร้างสินค้ายัดเข้าร้านคนอื่นได้
 	if !middleware.RequireShopAccess(c, input.ShopID) {
 		return
 	}
@@ -91,22 +89,30 @@ func CreateProduct(c *gin.Context) {
 		return
 	}
 
-
 	// 1. บันทึกราคาขายเริ่มต้น (Sell Price Log)
 	// ให้ราคาเก่าเป็น 0 เพื่อเป็นจุดสังเกตว่านี่คือราคาตั้งต้นตอนสร้างสินค้า
-	go database.DB.Exec(`
-		INSERT INTO sell_price_logs (product_id, sell_price_old, sell_price_new) 
-		VALUES (?, ?, ?)`,
+	if err := database.DB.Exec(`
+    INSERT INTO sell_price_logs (product_id, sell_price_old, sell_price_new) 
+    VALUES (?, ?, ?)`,
 		input.ProductID, 0, input.SellPrice,
-	)
+	).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "ไม่สามารถบันทึกราคาขายลง log ได้",
+		})
+		return
+	}
 
 	// 2. บันทึกราคาต้นทุนเริ่มต้น (Cost Price Log)
-	go database.DB.Exec(`
+	if err := database.DB.Exec(`
 		INSERT INTO cost_price_logs (product_id, cost_price_old, cost_price_new) 
 		VALUES (?, ?, ?)`,
 		input.ProductID, 0, input.CostPrice,
-	)
-	// ---------------------------------------------------------
+	).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "ไม่สามารถบันทึกราคาต้นทุนลง log ได้",
+		})
+		return
+	}
 
 	// Return Success
 	c.JSON(http.StatusOK, gin.H{
@@ -129,7 +135,7 @@ func CreateProduct(c *gin.Context) {
 // @Failure      500  {object}  map[string]string "Update failed"
 // @Router       /api/products/{id}/stock [patch]
 func UpdateStock(c *gin.Context) {
-	// รับ Product ID จาก path (RESTful: PATCH /products/:id/stock)
+
 	productID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "รหัสสินค้าไม่ถูกต้อง"})
@@ -151,9 +157,9 @@ func UpdateStock(c *gin.Context) {
 		return
 	}
 
-	//  อัปเดตแบบ "บวกเพิ่ม" (Atomic Update)
-	// ใช้ gorm.Expr("stock + ?", input.Stock) แทนการใส่ค่าตรงๆ
-	// shop_id ใน WHERE = กันเติมสต็อกสินค้าร้านอื่น (RowsAffected 0 ถ้าไม่ใช่ของร้านตัวเอง)
+	//  update แบบ atomic-safe
+	// ใช้ gorm.Expr() ส่ง expression ของ SQL ตรง ๆ ไปให้ฐานข้อมูล ไม่ต้องให้ GORM
+
 	result := database.DB.Model(&models.Product{}).
 		Where("product_id = ? AND shop_id IN ?", productID, shopIDs).
 		Update("stock", gorm.Expr("stock + ?", input.Stock))
@@ -170,7 +176,7 @@ func UpdateStock(c *gin.Context) {
 
 	// ดึงค่าล่าสุดมาโชว์
 	var updatedProduct models.Product
-	database.DB.Select("stock").First(&updatedProduct, productID)
+	database.DB.Where("product_id = ?", productID).Select("stock").First(&updatedProduct)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":       "เพิ่มสต็อกสินค้าเรียบร้อย",
@@ -192,7 +198,6 @@ func UpdateStock(c *gin.Context) {
 // @Success      200      {object}  models.Product
 // @Router       /api/products/{id} [put]
 func UpdateProduct(c *gin.Context) {
-	// 1. รับ ID จาก URL
 	productID := c.Param("id")
 
 	shopIDs, err := middleware.GetShopIDsFromAuth(c)
@@ -201,8 +206,7 @@ func UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	// 2. ค้นหาสินค้าเดิมก่อน (จำเป็นต้องมีค่าเดิมเพื่อเทียบราคาเก่า)
-	// ล็อค shop_id ด้วย เพื่อไม่ให้แก้ไขสินค้าของร้านอื่น
+	// ค้นหาสินค้าเดิมก่อน (จำเป็นต้องมีค่าเดิมเพื่อเทียบราคาเก่า)
 	var product models.Product
 	if err := database.DB.
 		Where("product_id = ? AND shop_id IN ?", productID, shopIDs).
@@ -211,7 +215,7 @@ func UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	// 3. รับข้อมูลเป็น Map (เพื่อดูว่าเขาส่งฟิลด์ไหนมาบ้าง)
+	// รับข้อมูลเป็น Map (เพื่อดูว่าเขาส่งฟิลด์ไหนมาบ้าง)
 	// การใช้ Map ช่วยให้รู้ว่า User ส่ง key ไหนมา ถ้าไม่ส่ง key ไหนมา map จะไม่มีค่านั้น
 	var inputMap map[string]interface{}
 	if err := c.ShouldBindJSON(&inputMap); err != nil {
@@ -219,12 +223,12 @@ func UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	// 4. กรองข้อมูล (White-list)
+	// กรองข้อมูล
 	updateData := make(map[string]interface{})
 	allowedFields := []string{
 		"name", "category_id", "barcode", "img_product",
 		"sell_price", "cost_price", "unit", "status",
-		// ❌ ไม่ใส่ "stock" ในนี้ เพื่อป้องกันการแก้ไขสต็อกผ่านหน้านี้
+		//ไม่ใส่ "stock" ในนี้ เพื่อป้องกันการแก้ไขสต็อกผ่านหน้านี้
 	}
 
 	for _, field := range allowedFields {
@@ -238,7 +242,7 @@ func UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	// 4.5 เช็คบาร์โค้ดซ้ำในร้านเดียวกัน (ไม่นับตัวสินค้าเอง)
+	// เช็คบาร์โค้ดซ้ำในร้านเดียวกัน
 	if val, ok := updateData["barcode"]; ok {
 		barcode := ""
 		if val != nil {
@@ -265,12 +269,7 @@ func UpdateProduct(c *gin.Context) {
 		}
 	}
 
-	// ---------------------------------------------------------
-	// ✨ ส่วนที่เพิ่ม: Manual Trigger (เขียน Logic เก็บ Log ด้วย Go)
-	// เพราะ Database ไม่อนุญาตให้สร้าง Trigger เราเลยทำเองตรงนี้เลย
-	// ---------------------------------------------------------
-
-	// 1. เช็คราคาขาย (Sell Price)
+	// เช็คราคาขาย (Sell Price)
 	if val, ok := updateData["sell_price"]; ok {
 		// แปลงค่าเป็น float64 เพื่อเปรียบเทียบ
 		newPrice, _ := val.(float64)
@@ -278,42 +277,50 @@ func UpdateProduct(c *gin.Context) {
 
 		if newPrice != oldPrice {
 			// บันทึกลงตาราง sell_price_logs
-			go database.DB.Exec(`
+			if err := database.DB.Exec(`
                 INSERT INTO sell_price_logs (product_id, sell_price_old, sell_price_new) 
                 VALUES (?, ?, ?)`,
 				product.ProductID, oldPrice, newPrice,
-			)
+			).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "ไม่สามารถบันทึกราคาขายลง log ได้",
+				})
+				return
+			}
 		}
 	}
 
-	// 2. เช็คราคาต้นทุน (Cost Price)
+	// เช็คราคาต้นทุน (Cost Price)
 	if val, ok := updateData["cost_price"]; ok {
 		newCost, _ := val.(float64)
 		oldCost := product.CostPrice
 
 		if newCost != oldCost {
 			// บันทึกลงตาราง cost_price_logs
-			go database.DB.Exec(`
+			if err := database.DB.Exec(`
                 INSERT INTO cost_price_logs (product_id, cost_price_old, cost_price_new) 
                 VALUES (?, ?, ?)`,
 				product.ProductID, oldCost, newCost,
-			)
+			).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "ไม่สามารถบันทึกราคาต้นทุนลง log ได้",
+				})
+				return
+			}
 		}
 	}
-	// ---------------------------------------------------------
 
-	// 5. สั่งอัปเดตลงฐานข้อมูล
+	// สั่งอัปเดตลงฐานข้อมูล
 	// GORM จะอัปเดตเฉพาะคอลัมน์ที่มีใน map updateData เท่านั้น
-	// คอลัมน์ไหนไม่อยู่ใน map จะคงค่าเดิมไว้ (Partial Update สมบูรณ์แบบ)
+	// คอลัมน์ไหนไม่อยู่ใน map จะคงค่าเดิมไว้
 	if err := database.DB.Model(&product).Updates(updateData).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "แก้ไขข้อมูลไม่สำเร็จ"})
 		return
 	}
 
-	// 6. ดึงข้อมูลล่าสุดมาแสดงผล (พร้อม Join Category เพื่อความสวยงาม)
-	// ต้องดึงใหม่เพราะค่าในตัวแปร product เก่ายังไม่อัปเดต
+	// ดึงข้อมูลล่าสุดมาแสดงผล Join Category เพื่อให้ได้ชื่อหมวดหมู่ด้วย)
 	var updatedProduct models.Product
-	database.DB.Preload("Category").First(&updatedProduct, productID)
+	database.DB.Where("product_id = ?", productID).Preload("Category").First(&updatedProduct)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "แก้ไขข้อมูลสำเร็จ",
@@ -342,8 +349,7 @@ func DeleteProduct(c *gin.Context) {
 		return
 	}
 
-	// 1. ตรวจสอบว่ามีสินค้านี้อยู่จริงไหม "และเป็นของร้านตัวเองไหม"
-	// คืน 404 (ไม่ใช่ 403) เมื่อเป็นสินค้าร้านอื่น เพื่อไม่ให้รู้ว่า id นั้นมีอยู่จริง
+	// ตรวจสอบว่ามีสินค้านี้อยู่จริงไหม "และเป็นของร้านตัวเองไหม"
 	var product models.Product
 	if err := database.DB.
 		Where("product_id = ? AND shop_id IN ?", productID, shopIDs).
@@ -352,8 +358,8 @@ func DeleteProduct(c *gin.Context) {
 		return
 	}
 
-	// 2. เช็คว่าสินค้านี้ เคยถูกขายไปหรือยัง? (เช็คจากตาราง sale_items)
-	var count int64
+	// เช็คว่าสินค้านี้ เคยถูกขายไปหรือยัง? (เช็คจากตาราง sale_items)
+	var count int64 //64 bit รองรับค่าที่มากๆ
 	database.DB.Table("sale_items").Where("product_id = ?", productID).Count(&count)
 
 	if count > 0 {
@@ -373,18 +379,15 @@ func DeleteProduct(c *gin.Context) {
 	// กรณีที่ 2: ยังไม่เคยถูกขายเลย (สร้างผิด) -> ลบทิ้งจากฐานข้อมูลได้เลย (Hard Delete)
 	// ต้องลบ log ประวัติราคาที่ผูก FK กับสินค้านี้ก่อน ไม่งั้น MySQL จะ block การลบด้วย foreign key constraint
 	if err := database.DB.Exec("DELETE FROM sell_price_logs WHERE product_id = ?", productID).Error; err != nil {
-		fmt.Println("DeleteProduct - Database Error deleting sell_price_logs:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบสินค้าได้"})
 		return
 	}
 	if err := database.DB.Exec("DELETE FROM cost_price_logs WHERE product_id = ?", productID).Error; err != nil {
-		fmt.Println("DeleteProduct - Database Error deleting cost_price_logs:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบสินค้าได้"})
 		return
 	}
 
 	if err := database.DB.Delete(&product).Error; err != nil {
-		fmt.Println("DeleteProduct - Database Error deleting product:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบสินค้าได้"})
 		return
 	}

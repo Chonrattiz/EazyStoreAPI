@@ -16,6 +16,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+
+func isAllDigits(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return s != ""
+}
+
 // CreateDebtor godoc
 // @Summary      เพิ่มลูกหนี้
 // @Description  สร้างลูกหนี้ใหม่ลงในฐานข้อมูล
@@ -27,16 +37,6 @@ import (
 // @Success      200  {object} models.Debtor
 // @Failure      400  {object} map[string]string
 // @Router       /api/createDebtor [post]
-// isAllDigits ตรวจว่าข้อความเป็นตัวเลขล้วนหรือไม่ (ใช้ตรวจเบอร์โทรศัพท์)
-func isAllDigits(s string) bool {
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return s != ""
-}
-
 func CreateDebtor(c *gin.Context) {
 	var input models.Debtor
 
@@ -82,7 +82,7 @@ func CreateDebtor(c *gin.Context) {
 	}
 
 	if err := database.DB.Create(&input).Error; err != nil {
-		// เช็คว่า Error คือเบอร์ซ้ำหรือไม่ (MySQL Error 1062)
+		// เช็คว่า Error คือเบอร์ซ้ำหรือไม่
 		if strings.Contains(err.Error(), "1062") || strings.Contains(err.Error(), "Duplicate entry") {
 			c.JSON(http.StatusConflict, gin.H{"error": "เบอร์โทรศัพท์นี้มีในระบบของร้านแล้ว"})
 			return
@@ -239,7 +239,6 @@ func GetDebtorHistory(c *gin.Context) {
 		Where("debtor_id = ? AND net_price > pay", debtorID).
 		Order("created_at desc, created_time desc").
 		Find(&sales).Error; err != nil {
-		fmt.Println("🚨 GORM ERROR:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในการดึงประวัติบิล"})
 		return
 	}
@@ -291,10 +290,13 @@ func GetDebtorHistory(c *gin.Context) {
 		dateTimeStr := fmt.Sprintf("%s %s", dateStr, timeStr)
 
 		var items []gin.H
+		
 		for _, item := range sale.SaleItems {
 			name := "สินค้าไม่ทราบชื่อ"
 			unit := "ชิ้น" // ค่าเริ่มต้นเผื่อไม่มีระบุ
 
+			//กรณีที่ Product หายไป ฐานข้อมูลมี Sale แต่ Product ถูกลบ 
+			// ทำดักไว้เฉยๆ ในความเป็นจริงไม่หายเพราะลบแบบเปลี่ยน status เป็น inactive แต่ถ้าเกิดกรณีนี้จริงๆ จะได้ไม่แครช
 			if p, ok := productMap[item.ProductID]; ok {
 				name = p.Name
 				if p.Unit != "" {
@@ -378,7 +380,7 @@ func UpdateDebtor(c *gin.Context) {
 		return
 	}
 
-	// 4. กรองข้อมูล (White-list) เฉพาะฟิลด์ที่อนุญาตให้แก้ไข
+	// 4. กรองข้อมูล  เฉพาะฟิลด์ที่อนุญาตให้แก้ไข
 	updateData := make(map[string]interface{})
 	allowedFields := []string{
 		"name", 
@@ -386,16 +388,14 @@ func UpdateDebtor(c *gin.Context) {
 		"address", 
 		"img_debtor", 
 		"credit_limit", 
-		// ⚠️ ไม่ใส่ "current_debt", "shop_id", "debtor_id" เพื่อความปลอดภัยของระบบ
 	}
-
 	for _, field := range allowedFields {
 		if val, exists := inputMap[field]; exists {
 			updateData[field] = val
 		}
 	}
 
-	// 4.5 ตรวจสอบค่าที่ส่งมาแก้ไข ห้ามส่งค่าว่างมาทับข้อมูลเดิม (ข้อความแจ้งเป็นภาษาไทย)
+	// 4.5 ตรวจสอบค่าที่ส่งมาแก้ไข ห้ามส่งค่าว่างมาทับข้อมูลเดิม 
 	if val, ok := updateData["name"]; ok {
 		name := strings.TrimSpace(fmt.Sprintf("%v", val))
 		if name == "" {

@@ -7,24 +7,12 @@ import (
 	"net/http"
 	"time"
 
-	"errors"
 	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-// CreateCreditSale godoc
-// @Summary      เพิ่มรายการขายค้างชำระ (เฉพาะ Credit เท่านั้น)
-// @Description  สร้างบิลขายและอัปเดตยอดหนี้คงค้างของลูกหนี้ในคราวเดียว
-// @Tags         Sale
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        Sale body models.Sale true "ข้อมูลรายการขายค้างชำระ"
-// @Success      200  {object} map[string]interface{}
-// @Failure      400  {object} map[string]string
-// @Router       /api/createCreditSale [post]
 func CreateCreditSale(c *gin.Context) {
 	var input models.Sale
 
@@ -50,7 +38,7 @@ func CreateCreditSale(c *gin.Context) {
 		return
 	}
 
-	// จ่ายครบ/จ่ายเกิน = ไม่มียอดค้าง ถ้าปล่อยผ่านส่วนเกินจะถูกเอาไปหักหนี้ก้อนเก่าโดยไม่ตั้งใจ
+	// จ่ายครบ/จ่ายเกิน = ไม่มียอดค้าง การชำระ → ต้องบันทึกเป็นขายเงินสดแทน
 	if input.Pay >= input.NetPrice {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "รายการนี้จ่ายครบแล้ว ไม่มียอดค้างชำระ กรุณาบันทึกเป็นการขายเงินสดแทน",
@@ -59,79 +47,88 @@ func CreateCreditSale(c *gin.Context) {
 	}
 
 	// 2.5 shop_id มาจาก body ต้องตรวจว่าเป็นร้านของ user ที่ล็อกอินอยู่จริง
-	// ด้านล่างใช้ input.ShopID กรองลูกหนี้/สินค้าอยู่แล้ว แต่ถ้าไม่ตรวจตรงนี้
-	// ก็แค่สวมเป็นร้านอื่นทั้งบิลแทน (สร้างหนี้ให้ลูกหนี้ร้านอื่น + ตัดสต็อกร้านอื่น)
 	if !middleware.RequireShopAccess(c, input.ShopID) {
 		return
 	}
 
 	// 3. เริ่ม Transaction
-	err := database.DB.Transaction(func(tx *gorm.DB) error {
+	tx := database.DB.Begin()
 
-		// ก. ตรวจสอบว่าลูกหนี้เป็นของร้านนี้จริงไหม และดึงข้อมูลมาเช็ควงเงิน
-		var debtor models.Debtor
-		if err := tx.Where("debtor_id = ? AND shop_id = ?", input.DebtorID, input.ShopID).First(&debtor).Error; err != nil {
-			return errors.New("ไม่พบข้อมูลลูกหนี้ในร้านค้าของคุณ หรือลูกหนี้ไม่มีสิทธิ์ค้างชำระ")
+	//  ตรวจสอบว่าลูกหนี้เป็นของร้านนี้จริงไหม และดึงข้อมูลมาเช็ควงเงิน
+	var debtor models.Debtor
+	if err := tx.Where("debtor_id = ? AND shop_id = ?", input.DebtorID, input.ShopID).First(&debtor).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่พบข้อมูลลูกหนี้ในร้านค้าของคุณ หรือลูกหนี้ไม่มีสิทธิ์ค้างชำระ"})
+		return
+	}
+
+	//  เช็ควงเงินหนี้ (Credit Limit)
+	amountToCharge := input.NetPrice - input.Pay
+	if (debtor.CurrentDebt + amountToCharge) > debtor.CreditLimit {
+		tx.Rollback()
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("ยอดหนี้เกินวงเงินที่กำหนด (คงเหลือที่ค้างได้: %.2f บาท)", debtor.CreditLimit-debtor.CurrentDebt)})
+		return
+	}
+
+	//  ตรวจสอบสินค้า เช็คสต๊อก และทำการตัดสต๊อก
+	for _, item := range input.SaleItems {
+		var product models.Product
+		// เช็คว่าสินค้ามีอยู่จริงและเป็นของร้านนี้
+		if err := tx.Where("product_id = ? AND shop_id = ?", item.ProductID, input.ShopID).First(&product).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("ไม่พบสินค้ารหัส %d หรือไม่ใช่สินค้าของร้านคุณ", item.ProductID)})
+			return
 		}
 
-		// ข. เช็ควงเงินหนี้ (Credit Limit)
-		amountToCharge := input.NetPrice - input.Pay
-		if (debtor.CurrentDebt + amountToCharge) > debtor.CreditLimit {
-			return fmt.Errorf("ยอดหนี้เกินวงเงินที่กำหนด (คงเหลือที่ค้างได้: %.2f บาท)", debtor.CreditLimit-debtor.CurrentDebt)
+		// เช็คว่าสต๊อกพอขายหรือไม่
+		if product.Stock < item.Amount {
+			tx.Rollback()
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("สินค้า '%s' มีสต๊อกไม่พอ (คงเหลือ %d ชิ้น, ต้องการ %d ชิ้น)", product.Name, product.Stock, item.Amount)})
+			return
 		}
 
-		// ค. ตรวจสอบสินค้า เช็คสต๊อก และทำการตัดสต๊อก
-		for _, item := range input.SaleItems {
-			var product models.Product
-			// เช็คว่าสินค้ามีอยู่จริงและเป็นของร้านนี้
-			if err := tx.Where("product_id = ? AND shop_id = ?", item.ProductID, input.ShopID).First(&product).Error; err != nil {
-				return fmt.Errorf("ไม่พบสินค้ารหัส %d หรือไม่ใช่สินค้าของร้านคุณ", item.ProductID)
-			}
-
-			// เช็คว่าสต๊อกพอขายหรือไม่
-			if product.Stock < item.Amount {
-				return fmt.Errorf("สินค้า '%s' มีสต๊อกไม่พอ (คงเหลือ %d ชิ้น, ต้องการ %d ชิ้น)", product.Name, product.Stock, item.Amount)
-			}
-
-			// ทำการตัดสต๊อก
-			if err := tx.Model(&models.Product{}).
-				Where("product_id = ? AND shop_id = ?", item.ProductID, input.ShopID).
-				UpdateColumn("stock", gorm.Expr("stock - ?", item.Amount)).Error; err != nil {
-				return fmt.Errorf("ไม่สามารถตัดสต๊อกสินค้า '%s' ได้", product.Name)
-			}
+		// ทำการตัดสต๊อก
+		if err := tx.Model(&models.Product{}).
+			Where("product_id = ? AND shop_id = ?", item.ProductID, input.ShopID).
+			UpdateColumn("stock", gorm.Expr("stock - ?", item.Amount)).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("ไม่สามารถตัดสต๊อกสินค้า '%s' ได้", product.Name)})
+			return
 		}
+	}
 
-		// ง. บันทึกข้อมูลการขาย (Sales & SaleItems)
-		// หมายเหตุ: GORM จะบันทึก SaleItems ให้โดยอัตโนมัติถ้า Struct Sale มี SaleItems
-		// เซ็ตวันที่/เวลาเป็นเวลาไทย (Asia/Bangkok) เพราะ Flutter ไม่ได้ส่ง created_time มา
-		// และเซิร์ฟเวอร์มักตั้ง timezone เป็น UTC จะทำให้เพี้ยนไป 7 ชั่วโมง
-		loc, errLoc := time.LoadLocation("Asia/Bangkok")
-		if errLoc != nil {
-			loc = time.FixedZone("ICT", 7*60*60)
-		}
-		now := time.Now().In(loc)
-		nowTime := now.Format("15:04:05")
-		input.CreatedAt = now
-		input.CreatedTime = &nowTime
+	//  บันทึกข้อมูลการขาย (Sales & SaleItems)
+	// หมายเหตุ: GORM จะบันทึก SaleItems ให้โดยอัตโนมัติถ้า Struct Sale มี SaleItems
+	// เซ็ตวันที่/เวลาเป็นเวลาไทย (Asia/Bangkok) เพราะ Flutter ไม่ได้ส่ง created_time มา
+	// และเซิร์ฟเวอร์มักตั้ง timezone เป็น UTC จะทำให้เพี้ยนไป 7 ชั่วโมง
+	loc, errLoc := time.LoadLocation("Asia/Bangkok")
+	if errLoc != nil {
+		loc = time.FixedZone("ICT", 7*60*60)
+	}
+	now := time.Now().In(loc)
+	nowTime := now.Format("15:04:05")
+	input.CreatedAt = now
+	input.CreatedTime = &nowTime
 
-		if err := tx.Create(&input).Error; err != nil {
-			return errors.New("ไม่สามารถบันทึกรายการขายได้")
-		}
+	if err := tx.Create(&input).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกรายการขายได้"})
+		return
+	}
 
-		// จ. อัปเดตยอดหนี้ปัจจุบัน (current_debt)
-		if err := tx.Table("debtors").
-			Where("debtor_id = ? AND shop_id = ?", input.DebtorID, input.ShopID).
-			UpdateColumn("current_debt", gorm.Expr("current_debt + ?", amountToCharge)).
-			Error; err != nil {
-			return errors.New("ไม่สามารถอัปเดตยอดหนี้ของลูกหนี้ได้")
-		}
+	// อัปเดตยอดหนี้ปัจจุบัน (current_debt)
+	if err := tx.Table("debtors").
+		Where("debtor_id = ? AND shop_id = ?", input.DebtorID, input.ShopID).
+		UpdateColumn("current_debt", gorm.Expr("current_debt + ?", amountToCharge)).
+		Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอัปเดตยอดหนี้ของลูกหนี้ได้"})
+		return
+	}
 
-		return nil
-	})
-
-	// 4. จัดการผลลัพธ์ (ข้อความ error ใน Transaction เป็นภาษาไทยทั้งหมดแล้ว ส่งกลับได้เลย)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// 4. Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูลได้"})
 		return
 	}
 

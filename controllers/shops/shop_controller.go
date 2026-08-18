@@ -28,7 +28,6 @@ func CreateShop(c *gin.Context) {
 		return
 	}
 
-	// เจ้าของร้านต้องเป็น user จาก token เท่านั้น ไม่งั้นสร้างร้านยัดใส่บัญชีคนอื่นได้
 	userIDValue, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบข้อมูลยืนยันตัวตน (กรุณา Login)"})
@@ -94,7 +93,6 @@ func GetShopByUser(c *gin.Context) {
 		return
 	}
 
-	// เช็คว่ามีร้านไหม (Optional: ถ้าอยากให้ return 404 เมื่อไม่มีร้านเลย)
 	if len(shops) == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"message": "ไม่พบข้อมูลร้านค้า", "data": []string{}})
 		return
@@ -127,13 +125,11 @@ func DeleteShop(c *gin.Context) {
 	var shop models.Shop
 	result := database.DB.Where("shop_id = ? AND user_id = ?", shopID, userID).Delete(&shop)
 
-	//เช็ค Error จาก Database
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบร้านค้าได้ กรุณาลองใหม่อีกครั้ง"})
 		return
 	}
 
-	// เช็คว่ามีแถวถูกลบจริงไหม (ถ้า 0 แปลว่าหาไม่เจอ หรือ ไม่ใช่เจ้าของ)
 	if result.RowsAffected == 0 {
 		c.JSON(http.StatusNotFound, gin.H{
 			"status":  "error",
@@ -161,18 +157,15 @@ func DeleteShop(c *gin.Context) {
 // @Failure      400      {object}  map[string]string "Bad Request"
 // @Router       /api/updateShop/{shop_id} [put]
 func UpdateShop(c *gin.Context) {
-	// 1. รับ ID และ UserID (เหมือนเดิม)
 	shopID := c.Param("shop_id")
 	userID, _ := c.Get("user_id")
 
-	// 2. รับข้อมูล (Partial Update)
 	var input models.UpdateShopInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "รูปแบบข้อมูลที่ส่งมาไม่ถูกต้อง"})
 		return
 	}
 
-	// 3. หา Shop เก่าออกมาก่อน
 	var shop models.Shop
 	if err := database.DB.Where("shop_id = ? AND user_id = ?", shopID, userID).First(&shop).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบร้านค้า หรือ ไม่มีสิทธิ์แก้ไข"})
@@ -198,7 +191,7 @@ func UpdateShop(c *gin.Context) {
 		shop.Pincode = *input.PinCode
 	}
 
-	// 5. บันทึก (Save จะอัปเดตทุก field ใน struct shop ที่เราแก้ค่าไปแล้ว)
+
 	if err := database.DB.Save(&shop).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "บันทึกไม่สำเร็จ"})
 		return

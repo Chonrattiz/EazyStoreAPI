@@ -4,10 +4,10 @@ import (
 	"EazyStoreAPI/database"
 	"EazyStoreAPI/middleware"
 	"EazyStoreAPI/models"
-	"net/http"
-	"time"
-	"strconv"
 	"fmt"
+	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -70,16 +70,14 @@ func PaymentDebt(c *gin.Context) {
 		return
 	}
 
-	// 3.5 กันชำระซ้ำตอนไม่มีหนี้ค้างแล้ว (เช่น กดจ่ายซ้อนจาก client ที่ยังถือยอดหนี้เก่าค้างอยู่)
-	// ถ้าไม่เช็คตรงนี้ ขั้นตอน cap ด้านล่างจะหักเหลือ 0 แล้วยังบันทึกประวัติจ่าย 0 บาท
-	// เป็น "สำเร็จ" อยู่ดี ทำให้ประวัติการชำระเงินมีรายการ 0 บาทที่ไม่มีความหมายปนอยู่
+	// 3.5 กันชำระซ้ำตอนไม่มีหนี้ค้างแล้ว (เช่น กดจ่ายซ้อนจาก ผู้ใช้ ที่ยังถือยอดหนี้เก่าค้างอยู่)
 	if debtor.CurrentDebt <= 0 {
 		tx.Rollback()
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ลูกหนี้รายนี้ไม่มียอดหนี้ค้างชำระแล้ว"})
 		return
 	}
 
-	// 4. คำนวณยอดที่ไปหักหนี้จริง (cap ไม่ให้เกินยอดหนี้คงเหลือ) ส่วนเกินคือเงินทอน ไม่ใช่ยอดที่เก็บหนี้ได้
+	// 4. คำนวณยอดที่ไปหักหนี้จริง (ถ้าเกินยอดหนี้ → คืนเงินทอน)
 	appliedAmount := input.AmountPaid
 	change := 0.0
 	if appliedAmount > debtor.CurrentDebt {
@@ -123,67 +121,67 @@ func PaymentDebt(c *gin.Context) {
 	})
 }
 
-
 // GetDebtorPaymentHistory godoc
 // @Summary      ดึงประวัติการจ่ายหนี้
 // @Description  ดึงรายการที่ลูกหนี้เคยนำเงินมาจ่ายจริง
 // @Tags         Debtor
 // @Router       /api/debtors/{id}/payments [get]
 func GetDebtorPaymentHistory(c *gin.Context) {
-    idParam := c.Param("id")
-    debtorID, _ := strconv.Atoi(idParam)
+	idParam := c.Param("id")
+	debtorID, _ := strconv.Atoi(idParam)
 
-    shopIDs, err := middleware.GetShopIDsFromAuth(c)
-    if err != nil {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบข้อมูลร้านค้าของผู้ใช้"})
-        return
-    }
+	shopIDs, err := middleware.GetShopIDsFromAuth(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบข้อมูลร้านค้าของผู้ใช้"})
+		return
+	}
 
-    // ลูกหนี้ต้องเป็นของร้านที่ user คนนี้เป็นเจ้าของ ไม่งั้นดูประวัติการจ่ายของร้านอื่นได้
-    var debtorCount int64
-    database.DB.Model(&models.Debtor{}).
-        Where("debtor_id = ? AND shop_id IN ?", debtorID, shopIDs).
-        Count(&debtorCount)
-    if debtorCount == 0 {
-        c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลลูกหนี้"})
-        return
-    }
+	// ลูกหนี้ต้องเป็นของร้านที่ user คนนี้เป็นเจ้าของ ไม่งั้นดูประวัติการจ่ายของร้านอื่นได้
+	var debtorCount int64
+	database.DB.Model(&models.Debtor{}).
+		Where("debtor_id = ? AND shop_id IN ?", debtorID, shopIDs).
+		Count(&debtorCount)
+	if debtorCount == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลลูกหนี้"})
+		return
+	}
 
-    var payments []models.DebtPayment
-    // ดึงข้อมูลประวัติการจ่ายเงิน เรียงจากล่าสุดไปหาเก่าสุด
-    if err := database.DB.Where("debtor_id = ?", debtorID).
-        Order("payment_date desc").
-        Find(&payments).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลการจ่ายเงินได้"})
-        return
-    }
+	var payments []models.DebtPayment
+	// ดึงข้อมูลประวัติการจ่ายเงิน เรียงจากล่าสุดไปหาเก่าสุด
+	if err := database.DB.Where("debtor_id = ?", debtorID).
+		Order("payment_date desc").
+		Find(&payments).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลการจ่ายเงินได้"})
+		return
+	}
 
-    thaiMonths := []string{"", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."}
+	thaiMonths := []string{"", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."}
 
-    var result []gin.H
-    for _, p := range payments {
-        // ฟอร์แมตวันที่แบบไทย
-        dateStr := fmt.Sprintf("%02d %s %d %02d:%02d", 
-            p.PaymentDate.Day(), 
-            thaiMonths[p.PaymentDate.Month()], 
-            p.PaymentDate.Year()+543,
-            p.PaymentDate.Hour(),
-            p.PaymentDate.Minute(),
-        )
+	var result []gin.H
+	//สร้าง JSON Object สำหรับแต่ละ Payment
+	for _, p := range payments {
+		// ฟอร์แมตวันที่แบบไทย
+		dateStr := fmt.Sprintf("%02d %s %d %02d:%02d",
+			p.PaymentDate.Day(),
+			thaiMonths[p.PaymentDate.Month()],
+			p.PaymentDate.Year()+543,
+			p.PaymentDate.Hour(),
+			p.PaymentDate.Minute(),
+		)
 
-        result = append(result, gin.H{
-            "payment_id":     p.PaymentID,
-            "amount_paid":    p.AmountPaid,
-            "method":         p.PaymentMethod, // เช่น เงินสด, โอนเงิน
-            "remaining_debt": p.CurrentDebt,   // ยอดหนี้ที่เหลือหลังจ่ายรอบนั้น
-            "date":           dateStr,
-            "recorded_by":    p.RecordedBy,
-        })
-    }
+		result = append(result, gin.H{
+			"payment_id":     p.PaymentID,
+			"amount_paid":    p.AmountPaid,
+			"method":         p.PaymentMethod, // เช่น เงินสด, โอนเงิน
+			"remaining_debt": p.CurrentDebt,   // ยอดหนี้ที่เหลือหลังจ่ายรอบนั้น
+			"date":           dateStr,
+			"recorded_by":    p.RecordedBy,
+		})
+	}
 
-    if result == nil {
-        result = []gin.H{}
-    }
+	if result == nil {
+		result = []gin.H{}
+	}
 
-    c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, result)
 }

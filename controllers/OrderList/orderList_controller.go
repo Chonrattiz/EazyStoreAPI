@@ -17,7 +17,6 @@ import (
 func ExportOrderPDF(c *gin.Context) {
 	var req models.ExportRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		fmt.Println("❌ ExportOrderPDF bind error:", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลที่ส่งมาไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง"})
 		return
 	}
@@ -48,7 +47,7 @@ func ExportOrderPDF(c *gin.Context) {
 	// 2. เริ่มสร้าง PDF
 	pdf := gofpdf.New("P", "mm", "A4", "")
 
-	// --- 🟢 โหลดฟอนต์จาก embed.FS ตรงๆ เป็น bytes (ไม่เขียนลง temp dir อีกต่อไป) ---
+	//  โหลดฟอนต์จาก embed.FS ตรงๆ เป็น bytes (ไม่เขียนลง temp dir อีกต่อไป) ---
 	// เดิมเขียนไฟล์ฟอนต์ลง os.TempDir() แล้ว cache ไว้โดยเช็คแค่ว่าไฟล์มีอยู่หรือยัง (os.Stat)
 	// โดยไม่เคยตรวจสอบความถูกต้องของไฟล์ที่ cache ไว้ ถ้าการเขียนครั้งแรกบน container
 	// เกิดเขียนไม่สมบูรณ์ (เช่น container ถูก restart หรือ request แรกๆ ชนกัน) ไฟล์ฟอนต์ที่เสีย
@@ -74,14 +73,14 @@ func ExportOrderPDF(c *gin.Context) {
 	pdf.AddPage()
 	pdf.SetMargins(15, 15, 15)
 
-	// --- 🔵 Header ---
+	// ---  Header ---
 	pdf.SetFont("THSarabun", "B", 22)
 	pdf.Cell(120, 10, ("ร้าน ")+" "+result.Name)
 
 	pdf.SetFont("THSarabun", "B", 16)
 	pdf.CellFormat(0, 10, ("รายงานการสั่งซื้อ"), "", 1, "R", false, 0, "")
 
-	pdf.SetFont("THSarabun", "", 14) // เพิ่มขนาดฟอนต์นิดหน่อยให้อ่านง่าย
+	pdf.SetFont("THSarabun", "", 14) 
 	pdf.SetTextColor(100, 100, 100)
 	pdf.Cell(120, 6, (result.Address))
 
@@ -103,7 +102,7 @@ func ExportOrderPDF(c *gin.Context) {
 	pdf.Line(15, pdf.GetY(), 195, pdf.GetY())
 	pdf.Ln(10)
 
-	// --- 🟠 ส่วนตาราง (Table Header) ---
+	// ---  ส่วนตาราง (Table Header) ---
 	pdf.SetFillColor(33, 37, 41)
 	pdf.SetTextColor(255, 255, 255)
 	pdf.SetFont("THSarabun", "B", 14)
@@ -111,13 +110,13 @@ func ExportOrderPDF(c *gin.Context) {
 	w := []float64{12, 85, 20, 20, 43}
 	headers := []string{"ลำดับ", "ชื่อสินค้า", "จำนวน", "หน่วยนับ", "หมายเหตุ"}
 
-	// --- 🟢 แก้ไขจุดที่ 3: ลูปหัวตารางแค่รอบเดียว (เดิมคุณมีเบิ้ล 2 ลูป) ---
+	// ลูปหัวตาราง
 	for i, str := range headers {
 		pdf.CellFormat(w[i], 10, (str), "1", 0, "C", true, 0, "")
 	}
 	pdf.Ln(-1)
 
-	// --- ⚪ ส่วนตาราง Body ---
+	// ---  ส่วนตาราง Body ---
 	pdf.SetTextColor(0, 0, 0)
 	pdf.SetFont("THSarabun", "", 14)
 
@@ -135,7 +134,7 @@ func ExportOrderPDF(c *gin.Context) {
 		pdf.CellFormat(w[4], 10, (item.Note), "1", 1, "L", true, 0, "")
 	}
 
-	// --- 🔴 ส่วนการส่ง Output ---
+	// ---  ส่วนการส่ง Output ---
 	var buf bytes.Buffer
 	err = pdf.Output(&buf)
 	if err != nil {
@@ -144,9 +143,9 @@ func ExportOrderPDF(c *gin.Context) {
 		return
 	}
 
-	c.Header("Content-Type", "application/pdf")
-	c.Header("Content-Disposition", "attachment; filename=order_report.pdf")
-	c.Header("Content-Length", fmt.Sprintf("%d", buf.Len()))
+	c.Header("Content-Type", "application/pdf") //บอก browser ว่านี่ PDF
+	c.Header("Content-Disposition", "attachment; filename=order_report.pdf") //บอก browser ให้ download เป็นไฟล์ชื่อ order_report.pdf
+	c.Header("Content-Length", fmt.Sprintf("%d", buf.Len()))//บอกขนาด bytes ที่จะส่ง
 
 	c.Data(http.StatusOK, "application/pdf", buf.Bytes())
 }

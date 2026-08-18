@@ -17,8 +17,3 @@ type Product struct {
 	Unit       string  `json:"unit" binding:"required" example:"ขวด"`
 	Status     bool    `json:"status" example:"true"`
 }
-
-type UpdateStockRequest struct {
-	ProductID int `json:"product_id" binding:"required"`
-	Stock     int `json:"stock" binding:"required"`
-}
