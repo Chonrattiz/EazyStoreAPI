@@ -22,15 +22,13 @@ import (
 // @Security     BearerAuth
 // @Router       /api/profile/update [put]
 func UpdateProfile(c *gin.Context) {
-	// 1. รับ UserID จาก JWT Token (สมมติว่า Auth Middleware เซ็ตค่า "user_id" ไว้ให้)
-	// หมายเหตุ: JWT มักจะแปลงตัวเลขเป็น float64 เราเลยต้อง cast ให้ถูกต้อง
+
 	userIDValue, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบข้อมูลยืนยันตัวตน (กรุณา Login)"})
 		return
 	}
-	
-	// แปลง type ให้เป็น uint ตามโมเดล
+
 	var userID uint
 	switch v := userIDValue.(type) {
 	case float64:
@@ -42,14 +40,12 @@ func UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	// 2. ค้นหาข้อมูล User เดิมจาก DB
 	var user models.User
 	if err := database.DB.First(&user, userID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบบัญชีผู้ใช้งานในระบบ"})
 		return
 	}
 
-	// 3. รับข้อมูลที่ส่งมาแบบ Map (เพื่อทำ Partial Update - อัปเดตเฉพาะค่าที่ส่งมา)
 	var inputMap map[string]interface{}
 	if err := c.ShouldBindJSON(&inputMap); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "รูปแบบข้อมูลไม่ถูกต้อง"})
@@ -57,11 +53,9 @@ func UpdateProfile(c *gin.Context) {
 	}
 
 	updateData := make(map[string]interface{})
-	needsOTP := false // ตัวแปรเช็คว่าต้องส่ง OTP ยืนยันอีเมลไหม
+	needsOTP := false
 	var newEmail string
 
-	// 4. กรองและตรวจสอบข้อมูลที่จะแก้ไข
-	// 4.1 แก้ไข Username
 	if val, ok := inputMap["username"]; ok {
 		newUsername := val.(string)
 		if newUsername != "" && newUsername != user.Username {
@@ -69,7 +63,6 @@ func UpdateProfile(c *gin.Context) {
 		}
 	}
 
-	// 4.2 แก้ไข Password (ต้องเข้ารหัสใหม่)
 	if val, ok := inputMap["password"]; ok {
 		passwordStr := val.(string)
 		if passwordStr != "" {
@@ -82,7 +75,6 @@ func UpdateProfile(c *gin.Context) {
 		}
 	}
 
-	// 4.3 แก้ไข Phone
 	if val, ok := inputMap["phone"]; ok {
 		newPhone := val.(string)
 		if newPhone != "" && newPhone != user.Phone {
@@ -96,11 +88,9 @@ func UpdateProfile(c *gin.Context) {
 		}
 	}
 
-	// 4.4 ✨ แก้ไข Email (ต้องบังคับยืนยันตัวตนใหม่)
 	if val, ok := inputMap["email"]; ok {
 		newEmail = val.(string)
-		
-		// ถ้ามีการส่งอีเมลมา และไม่ใช่อีเมลเดิม
+
 		if newEmail != "" && newEmail != user.Email {
 			var count int64
 			database.DB.Model(&models.User{}).Where("email = ?", newEmail).Count(&count)
@@ -109,14 +99,12 @@ func UpdateProfile(c *gin.Context) {
 				return
 			}
 
-			// เปลี่ยนค่าใน Map และบังคับ IsVerified กลับไปเป็น false ทันที
 			updateData["email"] = newEmail
 			updateData["is_verified"] = false
 			needsOTP = true
 		}
 	}
 
-	// 5. สั่งอัปเดตลง Database
 	if len(updateData) > 0 {
 		if err := database.DB.Model(&user).Updates(updateData).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "อัปเดตข้อมูลไม่สำเร็จ"})
@@ -131,7 +119,6 @@ func UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	// 6. ✨ สร้าง OTP และส่ง Email (ใช้ฟังก์ชันเดิมของคุณเลย)
 	if needsOTP {
 		otp := resetController.GenerateOTP()
 		now := time.Now()
@@ -149,23 +136,21 @@ func UpdateProfile(c *gin.Context) {
 			return
 		}
 
-		// สั่งส่งอีเมลแบบ Asynchronous (ไม่บล็อกการทำงาน)
 		go resetController.SendEmailOTP(newEmail, otp, "Eazy Store - ยืนยันรหัส OTP")
 	}
 
-	// 7. ดึงข้อมูลล่าสุดที่อัปเดตเสร็จแล้ว ส่งกลับไปให้หน้าแอป
 	var updatedUser models.User
 	database.DB.First(&updatedUser, userID)
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":      "อัปเดตโปรไฟล์สำเร็จ",
-		"user":         gin.H{
+		"message": "อัปเดตโปรไฟล์สำเร็จ",
+		"user": gin.H{
 			"id":       updatedUser.UserID,
 			"username": updatedUser.Username,
 			"email":    updatedUser.Email,
 			"phone":    updatedUser.Phone,
 		},
-		"require_auth": needsOTP, // ✨ คืนค่า True เพื่อบอก Flutter ให้เด้งไปหน้ายืนยัน OTP
+		"require_auth": needsOTP,
 	})
 }
 
@@ -203,8 +188,6 @@ func GetProfile(c *gin.Context) {
 		return
 	}
 
-	// 3. ส่งข้อมูลกลับไปให้หน้าแอป (Flutter) 
-	// ⚠️ สำคัญ: เราจะไม่ส่ง Password กลับไปเด็ดขาดเพื่อความปลอดภัย
 	c.JSON(http.StatusOK, gin.H{
 		"message": "ดึงข้อมูลโปรไฟล์สำเร็จ",
 		"user": gin.H{

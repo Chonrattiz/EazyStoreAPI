@@ -10,7 +10,7 @@ import (
 )
 
 // GetSalesSummary ดึงข้อมูลสรุปยอดขาย (รายวัน/เดือน/ปี)
-// GetSalesSummary ดึงข้อมูลสรุปยอดขาย (รายวัน/เดือน/ปี)
+
 func GetSalesSummary(c *gin.Context) {
 	// ตรวจว่า shop_id ที่ส่งมาเป็นร้านของ user ที่ล็อกอินอยู่จริง กันดูยอดขายร้านอื่น
 	shopID, ok := middleware.RequireShopIDQuery(c)

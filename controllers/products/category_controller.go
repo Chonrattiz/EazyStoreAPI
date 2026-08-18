@@ -27,6 +27,7 @@ func CreateCategory(c *gin.Context) {
 	}
 
 	var duplicateCount int64
+
 	database.DB.Model(&models.Category{}).
 		Where("shop_id = ? AND name = ?", input.ShopID, input.Name).
 		Count(&duplicateCount)

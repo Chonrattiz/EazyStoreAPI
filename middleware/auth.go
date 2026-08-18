@@ -13,25 +13,22 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-
 func CheckAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-	
+
 		authHeader := c.GetHeader("Authorization")
 
-		
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "กรุณาเข้าสู่ระบบก่อนใช้งาน (No Token)"})
-			c.Abort() 
+			c.Abort()
 			return
 		}
 
-		
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
 		//ตรวจสอบความถูกต้องของ Token (Verify)
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		
+
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, jwt.ErrSignatureInvalid
 			}
@@ -53,9 +50,9 @@ func CheckAuth() gin.HandlerFunc {
 	}
 }
 
-
 var ErrNoShop = errors.New("ไม่พบข้อมูลร้านค้าของผู้ใช้")
 var ErrShopForbidden = errors.New("ไม่มีสิทธิ์เข้าถึงข้อมูลของร้านค้านี้")
+
 const shopIDsContextKey = "auth_shop_ids"
 
 // GetShopIDsFromAuth คืน shop_id ทุกร้านที่ user ที่ล็อกอินอยู่เป็นเจ้าของ
