@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -90,7 +91,8 @@ func ExportOrderPDF(c *gin.Context) {
 	if err != nil {
 		loc = time.FixedZone("ICT", 7*60*60) // เผื่อ container ไม่มี tzdata ให้ fallback เป็น UTC+7 ตรงๆ
 	}
-	currentTime := time.Now().In(loc).Format("02/01/2006 | 15:04")
+	nowInLoc := time.Now().In(loc)
+	currentTime := nowInLoc.Format("02/01/2006 | 15:04")
 	pdf.CellFormat(0, 6, ("วันที่: " + currentTime), "", 1, "R", false, 0, "")
 
 	pdf.Cell(120, 6, ("เบอร์โทรศัพท์: " + result.Phone))
@@ -144,7 +146,10 @@ func ExportOrderPDF(c *gin.Context) {
 	}
 
 	c.Header("Content-Type", "application/pdf") //บอก browser ว่านี่ PDF
-	c.Header("Content-Disposition", "attachment; filename=order_report.pdf") //บอก browser ให้ download เป็นไฟล์ชื่อ order_report.pdf
+	dateStr := nowInLoc.Format("02-01-2006")
+	fallbackFilename := fmt.Sprintf("%s-report.pdf", dateStr)
+	utf8Filename := fmt.Sprintf("%s-%s.pdf", dateStr, result.Name)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", fallbackFilename, url.PathEscape(utf8Filename)))
 	c.Header("Content-Length", fmt.Sprintf("%d", buf.Len()))//บอกขนาด bytes ที่จะส่ง
 
 	c.Data(http.StatusOK, "application/pdf", buf.Bytes())
