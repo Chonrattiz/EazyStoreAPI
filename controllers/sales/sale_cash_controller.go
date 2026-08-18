@@ -42,6 +42,7 @@ func CreateSale(c *gin.Context) {
 	}
 
 	// 2. เริ่มต้น Transaction
+	//Transaction = การบันทึกกลุ่มของการเปลี่ยนแปลงข้อมูล ถ้าขั้นตอนใดล้มเหลว → Rollback ยกเลิกทั้งหมด ถ้าทั้งหมดสำเร็จ → Commit บันทึกลง DB
 	tx := database.DB.Begin()
 
 	// เวลาไทย (Asia/Bangkok) — เซิร์ฟเวอร์มักตั้งเป็น UTC ต้องแปลงก่อน
@@ -81,13 +82,14 @@ func CreateSale(c *gin.Context) {
 	for _, item := range input.SaleItems {
 		// สินค้าทุกชิ้นในบิลต้องเป็นสินค้าของร้านนี้ ไม่งั้นจะขาย (และตัดสต็อก) สินค้าร้านอื่นได้
 		var product models.Product
+		//ตรวจสอบสิทธิ์ของร้านค้าและสินค้าในรายการขาย
 		if err := tx.Where("product_id = ? AND shop_id = ?", item.ProductID, input.ShopID).First(&product).Error; err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusBadRequest, gin.H{"error": "พบสินค้าที่ไม่ใช่ของร้านนี้ในรายการขาย"})
 			return
 		}
 
-		// เช็คว่าสต๊อกพอขายหรือไม่ ก่อนตัดสต็อก (มาตรฐานเดียวกับฝั่งขายเชื่อ)
+		// เช็คว่าสต๊อกพอขายหรือไม่ ก่อนตัดสต็อก
 		if product.Stock < item.Amount {
 			tx.Rollback()
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("สินค้า '%s' มีสต๊อกไม่พอ (คงเหลือ %d ชิ้น, ต้องการ %d ชิ้น)", product.Name, product.Stock, item.Amount)})

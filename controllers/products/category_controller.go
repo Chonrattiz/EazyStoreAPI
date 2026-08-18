@@ -111,6 +111,23 @@ func DeleteCategory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "ปิดใช้งานหมวดหมู่สำเร็จ", "status": "inactive"})
 }
 
+// GetCategories ดึงหมวดหมู่ของร้านที่ระบุ (ต้องส่ง shop_id มา)
+func GetCategories(c *gin.Context) {
+	shopID, ok := middleware.RequireShopIDQuery(c)
+	if !ok {
+		return
+	}
+
+	var categories []models.Category
+
+	if err := database.DB.Where("shop_id = ? AND status = ?", shopID, true).Order("category_id ASC").Find(&categories).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลหมวดหมู่ได้"})
+		return
+	}
+
+	c.JSON(http.StatusOK, categories)
+}
+
 func GetInactiveCategories(c *gin.Context) {
 	shopID, ok := middleware.RequireShopIDQuery(c)
 	if !ok {

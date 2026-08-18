@@ -36,22 +36,7 @@ func thaiSortKey(input string) string {
 	return sb.String()
 }
 
-// GetCategories ดึงหมวดหมู่ของร้านที่ระบุ (ต้องส่ง shop_id มา)
-func GetCategories(c *gin.Context) {
-	shopID, ok := middleware.RequireShopIDQuery(c)
-	if !ok {
-		return
-	}
 
-	var categories []models.Category
-
-	if err := database.DB.Where("shop_id = ? AND status = ?", shopID, true).Order("category_id ASC").Find(&categories).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลหมวดหมู่ได้"})
-		return
-	}
-
-	c.JSON(http.StatusOK, categories)
-}
 
 // GetProductsByShop godoc
 // @Summary      ดึงรายการสินค้าทั้งหมดของร้านค้า
@@ -80,30 +65,30 @@ func GetProductsByShop(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1")) // เปลี่ยน default เป็น 1
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 
-	// ✨ เพิ่มการรับค่าการเรียงลำดับจาก App (เช่น asc หรือ desc)
+	// เพิ่มการรับค่าการเรียงลำดับจาก App (เช่น asc หรือ desc)
 	sortOrder := c.DefaultQuery("sort", "desc")
 
 	var products []models.Product
 	var totalItems int64
 
-	// 1. สร้าง Query พื้นฐาน
+	//สร้าง Query พื้นฐาน
 	query := database.DB.Model(&models.Product{}).Preload("Category").Where("shop_id = ?", shopID)
 
-	// 2. Filter: ค้นหา
+	// Filter: ค้นหา
 	if search != "" {
 		query = query.Where("name LIKE ? OR barcode LIKE ?", "%"+search+"%", "%"+search+"%")
 	}
 
-	// 3. Filter: หมวดหมู่ (เช็คให้ชัวร์ว่าไม่ใช่ "0" หรือว่าง)
+	// Filter: หมวดหมู่ (เช็คให้ชัวร์ว่าไม่ใช่ "0" หรือว่าง)
 	if categoryID != "" && categoryID != "0" {
 		query = query.Where("category_id = ?", categoryID)
 	}
 
-	// 4. นับจำนวนรวมหลังจาก Filter แล้ว (เพื่อให้ Total Pages ถูกต้อง)
+	//นับจำนวนรวมหลังจาก Filter แล้ว (เพื่อให้ Total Pages ถูกต้อง)
 	query.Count(&totalItems)
 
-	// 5. ✨ Logic การเรียงลำดับ: ต้องเรียง "ก่อน" ทำ Limit/Offset
-	// รองรับ name_asc / name_desc / stock_asc / stock_desc (รูปแบบที่ App ส่งมาปัจจุบัน)
+	// Logic การเรียงลำดับ: ต้องเรียง "ก่อน" ทำ Limit/Offset
+	// รองรับ name_asc / name_desc / stock_asc / stock_desc 
 	// และคง asc/desc แบบเดิมไว้เพื่อ backward compatibility (หมายถึงสต็อก)
 	offset := (page - 1) * limit
 
@@ -169,13 +154,13 @@ func GetProductsByShop(c *gin.Context) {
 // @Failure      404  {object}  map[string]string "Product not found"
 // @Router       /api/product/search [get]
 func GetProductBySearch(c *gin.Context) {
-	// 1. รับค่า shop_id พร้อมตรวจสิทธิ์ว่าเป็นร้านของ user ที่ล็อกอินอยู่
+	//  รับค่า shop_id พร้อมตรวจสิทธิ์ว่าเป็นร้านของ user ที่ล็อกอินอยู่
 	shopID, ok := middleware.RequireShopIDQuery(c)
 	if !ok {
 		return
 	}
 
-	// 2. ตรวจสอบว่าส่ง keyword มาไหม
+	// ตรวจสอบว่าส่ง keyword มาไหม
 	keyword := c.Query("keyword")
 	if keyword == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุคำค้นหา และ รหัสร้านค้า"})
@@ -184,10 +169,9 @@ func GetProductBySearch(c *gin.Context) {
 
 	var product models.Product
 
-	// 3. ค้นหาโดยระบุ shop_id ด้วย
-	// SQL: SELECT * FROM products WHERE shop_id = ? AND (product_code = ? OR barcode = ? OR name LIKE ?) LIMIT 1
+	// ค้นหาโดยระบุ shop_id ด้วย
 	result := database.DB.Preload("Category").
-		Where("shop_id = ?", shopID). // ✅ ล็อคให้หาแค่ในร้านนี้เท่านั้น!
+		Where("shop_id = ?", shopID). 
 		Where("product_code = ? OR barcode = ? OR name LIKE ?", keyword, keyword, "%"+keyword+"%").
 		First(&product)
 
