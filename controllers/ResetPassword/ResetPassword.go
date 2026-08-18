@@ -17,19 +17,16 @@ import (
 	"EazyStoreAPI/models"
 )
 
-// GenerateOTP ทำหน้าที่สุ่มตัวเลข 6 หลัก
 func GenerateOTP() string {
 	max := big.NewInt(1000000)
 	n, _ := rand.Int(rand.Reader, max)
 	return fmt.Sprintf("%06d", n)
 }
 
-// ✅ SendEmailOTP เปลี่ยนมาใช้ Google Apps Script (ยิงผ่าน HTTP พอร์ต 443 ทะลุ Render 100%)
 func SendEmailOTP(targetEmail string, otpCode string, subject string) error {
-	// ⚠️ สำคัญ: เอา URL ของ Google Apps Script ที่ได้จากขั้นตอน Deploy มาใส่ในเครื่องหมายคำพูดด้านล่างนี้
+
 	gasURL := "https://script.google.com/macros/s/AKfycbx68CqYnpCakrLJ3KmMHHKJxlKbuRzFqqcseE3K9A-NOGMjhVYUCTpJo6p5Kq0UHzvw/exec"
 
-	// โครงสร้าง HTML เดิมที่สวยงาม
 	htmlContent := fmt.Sprintf(`
 	<html>
 	<body style="font-family: Arial, sans-serif;">
@@ -53,12 +50,6 @@ func SendEmailOTP(targetEmail string, otpCode string, subject string) error {
 		"htmlBody": htmlContent,
 	})
 
-	// Apps Script รันสคริปต์ (รวมถึงส่งเมล) ให้เสร็จก่อน แล้วค่อยตอบกลับด้วย 302
-	// ไปยัง URL แคชผลลัพธ์ (script.googleusercontent.com) — การไล่ตาม redirect นั้น
-	// เป็นแค่การไปอ่านผลลัพธ์ที่แคชไว้ ไม่เกี่ยวกับว่าเมลถูกส่งไปแล้วหรือยัง
-	// แต่ hop ที่สองนี้เจอปัญหาเน็ตหลุด/ช้าบ่อย ทำให้เข้าใจผิดว่าส่งเมลไม่สำเร็จ
-	// ทั้งที่จริงเมลถูกส่งไปตั้งแต่ hop แรกแล้ว จึงตั้ง client ไม่ให้ไล่ตาม redirect
-	// และถือว่า 200 หรือ 302 คือสำเร็จทั้งคู่
 	client := &http.Client{
 		Timeout: 15 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -81,7 +72,6 @@ func SendEmailOTP(targetEmail string, otpCode string, subject string) error {
 	return fmt.Errorf("failed to send email, status code: %d", resp.StatusCode)
 }
 
-// RequestResetOTP ฟังก์ชันสำหรับรับเรื่องกู้รหัสผ่าน
 func RequestResetOTP(c *gin.Context) {
 	var input models.ResetRequestInput
 
@@ -90,21 +80,18 @@ func RequestResetOTP(c *gin.Context) {
 		return
 	}
 
-	// 1. ตรวจสอบว่ามี User นี้ในตาราง users หรือไม่
 	var user models.User
 	if err := database.DB.Where("email = ?", input.Email).First(&user).Error; err != nil {
-		// เพื่อความปลอดภัย ไม่บอกว่าไม่เจออีเมล
 		c.JSON(200, gin.H{"message": "หากอีเมลถูกต้อง ระบบจะส่งรหัสไปให้"})
 		return
 	}
 
-	// 2. เตรียมข้อมูล OTP ใหม่
+
 	otp := GenerateOTP()
 	now := time.Now()
 	expiresAt := now.Add(10 * time.Minute)
 
-	// 3. ใช้เทคนิค "Upsert" (Update หรือ Insert) — ตั้ง CreatedAt ใหม่ทุกครั้งที่ขอ OTP
-	// เพื่อให้ created_at เป็นเวลาของ OTP ชุดล่าสุดเสมอ ไม่ใช่ค้างจากรอบแรกสุด
+
 	resetData := models.PasswordReset{
 		Email:     input.Email,
 		OTPCode:   otp,
@@ -118,8 +105,6 @@ func RequestResetOTP(c *gin.Context) {
 		return
 	}
 
-	// 4. ส่งเมลและรอผลลัพธ์จริง เพื่อให้ frontend รู้ว่าส่งสำเร็จหรือไม่
-	// ก่อนจะยอมให้ผู้ใช้กดไปหน้ายืนยัน OTP
 	if err := SendEmailOTP(input.Email, otp, "Eazy Store - ยืนยันรหัสผ่านใหม่"); err != nil {
 		fmt.Printf("Error sending email to %s: %v\n", input.Email, err)
 		c.JSON(500, gin.H{"error": "ไม่สามารถส่งอีเมล OTP ได้ กรุณาลองใหม่อีกครั้ง"})
@@ -129,7 +114,7 @@ func RequestResetOTP(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "ส่งรหัส OTP เรียบร้อยแล้ว"})
 }
 
-// VerifyOTP ตรวจสอบรหัสที่ผู้ใช้กรอกมา
+
 func VerifyOTP(c *gin.Context) {
 	var input models.VerifyOTPInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -138,13 +123,13 @@ func VerifyOTP(c *gin.Context) {
 	}
 
 	var resetRecord models.PasswordReset
-	// ค้นหารหัสจากฐานข้อมูล
+
 	if err := database.DB.Where("email = ? AND otp_code = ?", input.Email, input.OTPCode).First(&resetRecord).Error; err != nil {
 		c.JSON(401, gin.H{"error": "รหัส OTP ไม่ถูกต้อง"})
 		return
 	}
 
-	// ตรวจสอบว่าหมดอายุหรือยัง
+
 	if time.Now().After(resetRecord.ExpiresAt) {
 		c.JSON(401, gin.H{"error": "รหัส OTP หมดอายุแล้ว"})
 		return
@@ -153,6 +138,7 @@ func VerifyOTP(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "ยืนยันรหัส OTP สำเร็จ", "status": "verified"})
 }
 
+
 func UpdatePassword(c *gin.Context) {
 	var input models.UpdatePasswordInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -160,23 +146,23 @@ func UpdatePassword(c *gin.Context) {
 		return
 	}
 
-	// 1. ตรวจสอบ OTP อีกรอบเพื่อป้องกันการยิง API ข้ามขั้นตอน
+	
 	var resetRecord models.PasswordReset
 	if err := database.DB.Where("email = ? AND otp_code = ?", input.Email, input.OTPCode).First(&resetRecord).Error; err != nil {
 		c.JSON(401, gin.H{"error": "ไม่ได้รับอนุญาตให้เปลี่ยนรหัสผ่าน"})
 		return
 	}
 
-	// 2. แฮชรหัสผ่านใหม่ (bcrypt) เหมือนตอน Register
+
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(input.NewPassword), 14)
 
-	// 3. อัปเดตในตาราง users
+
 	if err := database.DB.Model(&models.User{}).Where("email = ?", input.Email).Update("password", string(hashedPassword)).Error; err != nil {
 		c.JSON(500, gin.H{"error": "ไม่สามารถเปลี่ยนรหัสผ่านได้"})
 		return
 	}
 
-	// 4. ลบรหัส OTP ทิ้งทันทีเมื่อใช้เสร็จแล้ว (One-time use)
+	
 	database.DB.Delete(&resetRecord)
 
 	c.JSON(200, gin.H{"message": "เปลี่ยนรหัสผ่านสำเร็จแล้ว!"})

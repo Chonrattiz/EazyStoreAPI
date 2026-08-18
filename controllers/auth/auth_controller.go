@@ -109,6 +109,7 @@ func VerifyRegistration(c *gin.Context) {
 		Email string `json:"email" binding:"required"`
 		OTP   string `json:"otp" binding:"required"`
 	}
+
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(400, gin.H{"error": "กรุณากรอกข้อมูลให้ครบ"})
 		return
@@ -138,19 +139,18 @@ func ChangeEmailBeforeVerify(c *gin.Context) {
 		Username string `json:"username" binding:"required"`
 		NewEmail string `json:"new_email" binding:"required,email"`
 	}
+
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(400, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
 		return
 	}
 
-	// ค้นหา User ที่ยังไม่ยืนยัน
 	var user models.User
 	if err := database.DB.Where("username = ? AND is_verified = ?", input.Username, false).First(&user).Error; err != nil {
 		c.JSON(404, gin.H{"error": "ไม่พบข้อมูลผู้ใช้ที่รอการยืนยัน"})
 		return
 	}
 
-	// อัปเดตอีเมลใหม่
 	user.Email = input.NewEmail
 	database.DB.Save(&user)
 
@@ -196,43 +196,42 @@ func ChangeEmailBeforeVerify(c *gin.Context) {
 func Login(c *gin.Context) {
 	var input models.LoginInput
 
-	// 1. ตรวจสอบว่ากรอกข้อมูลมาครบถ้วนหรือไม่
+	
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกข้อมูลให้ครบถ้วน"})
 		return
 	}
 
 	var user models.User
-	// ข้อความ Error แบบกลางเพื่อความปลอดภัย (User Enumeration Protection)
+
 	invalidMsg := "อีเมล/เบอร์โทรศัพท์หรือรหัสผ่านไม่ถูกต้อง"
 
-	// 2. ค้นหาผู้ใช้งานด้วย Email หรือเบอร์โทรศัพท์
+
 	if err := database.DB.Where("email = ? OR phone = ?", input.Username, input.Username).First(&user).Error; err != nil {
-		// หากไม่พบผู้ใช้ ให้ตอบกลับด้วยข้อความกลาง
+	
 		c.JSON(http.StatusUnauthorized, gin.H{"error": invalidMsg})
 		return
 	}
 
-	// 3. ✨ ตรวจสอบว่าผู้ใช้งานยืนยันอีเมล (OTP) แล้วหรือยัง
+	
 	if !user.IsVerified {
 		c.JSON(http.StatusForbidden, gin.H{
 			"error":       "กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าสู่ระบบ",
 			"is_verified": false,
-			"email":       user.Email,    // ส่งเมลจริงจาก DB
-			"username":    user.Username, // ✨ ต้องส่ง Username จริงกลับไปด้วย!
+			"email":       user.Email,   
+			"username":    user.Username,
 		})
 		return
 	}
 
-	// 4. ตรวจสอบรหัสผ่านโดยใช้ Bcrypt
+
 	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password))
 	if err != nil {
-		// หากรหัสผ่านผิด ให้ตอบกลับด้วยข้อความกลาง
 		c.JSON(http.StatusUnauthorized, gin.H{"error": invalidMsg})
 		return
 	}
 
-	// 5. สร้าง Access Token (อายุ 15 นาที)
+
 	accessTokenExpiry := nowInBangkok().Add(15 * time.Minute)
 	accessClaims := jwt.MapClaims{
 		"user_id":  user.UserID,
@@ -243,14 +242,13 @@ func Login(c *gin.Context) {
 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
 	secretKey := os.Getenv("JWT_SECRET")
-
 	accessTokenString, err := accessToken.SignedString([]byte(secretKey))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างรหัสการเข้าถึงได้"})
 		return
 	}
 
-	// 6. สร้าง Refresh Token (อายุ 1 เดือน)
+
 	refreshTokenExpiry := nowInBangkok().AddDate(0, 1, 0)
 	refreshClaims := jwt.MapClaims{
 		"user_id": user.UserID,
@@ -265,7 +263,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// 7. เก็บ Refresh Token ในฐานข้อมูล
+	
 	refreshTokenRecord := models.RefreshToken{
 		UserID:    user.UserID,
 		Token:     refreshTokenString,
@@ -284,12 +282,12 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// 8. ส่งข้อมูลกลับเมื่อ Login สำเร็จ
+	
 	c.JSON(http.StatusOK, gin.H{
 		"message":       "เข้าสู่ระบบสำเร็จ",
 		"access_token":  accessTokenString,
 		"refresh_token": refreshTokenString,
-		"expires_in":    900, // 15 นาทีเป็นวินาที
+		"expires_in":    900, // 15 นาที
 		"user": gin.H{
 			"id":       user.UserID,
 			"username": user.Username,

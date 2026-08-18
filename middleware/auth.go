@@ -13,29 +13,28 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// ฟังก์ชันสำหรับตรวจเช็ค Token
+
 func CheckAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. ดึง Header ที่ชื่อ Authorization
+	
 		authHeader := c.GetHeader("Authorization")
 
-		// 2. เช็คว่าส่งมาไหม และรูปแบบถูกต้องไหม (ต้องขึ้นต้นด้วย Bearer )
+		
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "กรุณาเข้าสู่ระบบก่อนใช้งาน (No Token)"})
-			c.Abort() // หยุดการทำงานทันที ไม่ให้ไปต่อ
+			c.Abort() 
 			return
 		}
 
-		// 3. ตัดคำว่า "Bearer " ออก ให้เหลือแต่ตัว Token เพียวๆ
+		
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
-		// 4. ตรวจสอบความถูกต้องของ Token (Verify)
+		//ตรวจสอบความถูกต้องของ Token (Verify)
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			// เช็คว่าวิธีเข้ารหัสตรงกันไหม (HS256)
+		
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, jwt.ErrSignatureInvalid
 			}
-			// *สำคัญ* ต้องใช้ Secret Key ตัวเดียวกับตอน Login เป๊ะๆ
 			return []byte(os.Getenv("JWT_SECRET")), nil
 		})
 
@@ -45,8 +44,6 @@ func CheckAuth() gin.HandlerFunc {
 			return
 		}
 
-		// 5. ถ้าผ่าน! ดึงข้อมูล User จาก Token มาแปะไว้ใน Context
-		// เพื่อให้ Controller เอาไปใช้ต่อได้ (เช่น รู้ว่าใครเป็นคนยิงมา)
 		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 			c.Set("user_id", claims["user_id"])
 			c.Set("username", claims["username"])
@@ -56,13 +53,9 @@ func CheckAuth() gin.HandlerFunc {
 	}
 }
 
-// ErrNoShop ใช้เมื่อหา shop ของ user ที่ล็อกอินอยู่ไม่เจอ
+
 var ErrNoShop = errors.New("ไม่พบข้อมูลร้านค้าของผู้ใช้")
-
-// ErrShopForbidden ใช้เมื่อ shop_id ที่ client ส่งมาไม่ใช่ร้านของ user ที่ล็อกอินอยู่
 var ErrShopForbidden = errors.New("ไม่มีสิทธิ์เข้าถึงข้อมูลของร้านค้านี้")
-
-// shopIDsContextKey คีย์สำหรับ cache รายการ shop_id ของ user ไว้ตลอด request เดียว
 const shopIDsContextKey = "auth_shop_ids"
 
 // GetShopIDsFromAuth คืน shop_id ทุกร้านที่ user ที่ล็อกอินอยู่เป็นเจ้าของ
