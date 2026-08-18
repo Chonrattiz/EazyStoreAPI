@@ -46,20 +46,8 @@ func Register(c *gin.Context) {
 	var existingUser models.User
 	result := database.DB.Where("email = ? OR phone = ?", input.Email, input.Phone).First(&existingUser)
 
-	// เช็คว่า Username ซ้ำกับคนอื่นไหม (ยกเว้นแถวเดิมของตัวเองกรณี resume การสมัครที่ยังไม่ยืนยัน)
-	var usernameCount int64
-	usernameQuery := database.DB.Model(&models.User{}).Where("username = ?", input.Username)
 	if result.Error == nil {
-		usernameQuery = usernameQuery.Where("user_id <> ?", existingUser.UserID)
-	}
-	usernameQuery.Count(&usernameCount)
-	if usernameCount > 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": "ชื่อผู้ใช้งาน (Username) นี้มีคนใช้แล้ว"})
-		return
-	}
-
-	if result.Error == nil {
-
+		// ... (กรณีเคยสมัครค้างไว้)
 		if existingUser.IsVerified {
 			c.JSON(http.StatusConflict, gin.H{"error": "Email หรือ เบอร์โทรนี้ถูกใช้งานแล้ว"})
 			return
@@ -75,7 +63,7 @@ func Register(c *gin.Context) {
 			return
 		}
 	} else {
-
+		// ... (กรณีผู้ใช้ใหม่ 100%)
 		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(input.Password), 14)
 		existingUser = models.User{
 			Username:   input.Username,
