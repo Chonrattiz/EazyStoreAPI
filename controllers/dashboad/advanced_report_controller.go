@@ -4,6 +4,7 @@ import (
 	"EazyStoreAPI/database"
 	"EazyStoreAPI/middleware"
 	"EazyStoreAPI/models"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -25,39 +26,62 @@ func GetAdvancedReport(c *gin.Context) {
 	}
 
 	// 1. กราฟยอดขาย (Sales Chart)
-
 	var salesChart []models.ChartItem
-	var rawSalesChart []models.ChartItem
-	database.DB.Table("sales").
-		Select("DATE(created_at) as date, COALESCE(SUM(net_price), 0) as total_sales").
-		Where("shop_id = ? AND created_at >= ? AND created_at <= ?", shopID, startDate, endDate).
-		Group("DATE(created_at)").
-		Order("date ASC").
-		Scan(&rawSalesChart)
+	if startDate == endDate {
+		// รายวัน (วันนี้): Group ตามชั่วโมง 00:00 - 23:00
+		var rawSalesChart []models.ChartItem
+		database.DB.Table("sales").
+			Select("DATE_FORMAT(CONCAT(DATE(created_at), ' ', COALESCE(created_time, '00:00:00')), '%H:00') as date, COALESCE(SUM(net_price), 0) as total_sales").
+			Where("shop_id = ? AND DATE(created_at) = ?", shopID, startDate).
+			Group("DATE_FORMAT(CONCAT(DATE(created_at), ' ', COALESCE(created_time, '00:00:00')), '%H:00')").
+			Order("date ASC").
+			Scan(&rawSalesChart)
 
-	salesMap := make(map[string]float64)
-	for _, item := range rawSalesChart {
-		// ตัดเอาแค่ "YYYY-MM-DD" ตัดเวลาทิ้ง
-		dateOnly := item.Date
-		if len(dateOnly) >= 10 {
-			dateOnly = dateOnly[:10]
+		salesMap := make(map[string]float64)
+		for _, item := range rawSalesChart {
+			salesMap[item.Date] = item.TotalSales
 		}
-		salesMap[dateOnly] = item.TotalSales
-	}
 
-	// สร้างวันที่ให้ครบทุกวันในช่วงที่เลือก (แม้บางวันจะขายไม่ได้เลย ก็ต้องแสดงยอดเป็น 0)
-	start, err1 := time.Parse("2006-01-02", startDate)
-	end, err2 := time.Parse("2006-01-02", endDate)
-	if err1 == nil && err2 == nil {
-		for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
-			dateStr := d.Format("2006-01-02")
+		for hour := 0; hour < 24; hour++ {
+			hourStr := fmt.Sprintf("%02d:00", hour)
+			dateStr := fmt.Sprintf("%sT%s:00", startDate, hourStr)
 			salesChart = append(salesChart, models.ChartItem{
 				Date:       dateStr,
-				TotalSales: salesMap[dateStr],
+				TotalSales: salesMap[hourStr],
 			})
 		}
 	} else {
-		salesChart = rawSalesChart
+		// รายช่วงเวลา (เดือนนี้ / ปีนี้): Group ตามวัน
+		var rawSalesChart []models.ChartItem
+		database.DB.Table("sales").
+			Select("DATE(created_at) as date, COALESCE(SUM(net_price), 0) as total_sales").
+			Where("shop_id = ? AND DATE(created_at) >= ? AND DATE(created_at) <= ?", shopID, startDate, endDate).
+			Group("DATE(created_at)").
+			Order("date ASC").
+			Scan(&rawSalesChart)
+
+		salesMap := make(map[string]float64)
+		for _, item := range rawSalesChart {
+			dateOnly := item.Date
+			if len(dateOnly) >= 10 {
+				dateOnly = dateOnly[:10]
+			}
+			salesMap[dateOnly] = item.TotalSales
+		}
+
+		start, err1 := time.Parse("2006-01-02", startDate)
+		end, err2 := time.Parse("2006-01-02", endDate)
+		if err1 == nil && err2 == nil {
+			for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+				dateStr := d.Format("2006-01-02")
+				salesChart = append(salesChart, models.ChartItem{
+					Date:       dateStr,
+					TotalSales: salesMap[dateStr],
+				})
+			}
+		} else {
+			salesChart = rawSalesChart
+		}
 	}
 
 	// 2. สัดส่วนวิธีการชำระเงิน (Payment Methods Breakdown)
@@ -68,7 +92,7 @@ func GetAdvancedReport(c *gin.Context) {
 			COALESCE(SUM(CASE WHEN payment_method = 'จ่ายเงินสด' THEN (CASE WHEN pay >= net_price THEN net_price ELSE pay END) ELSE 0 END), 0) as paid_cash,
 			COALESCE(SUM(CASE WHEN payment_method = 'โอนจ่าย' THEN (CASE WHEN pay >= net_price THEN net_price ELSE pay END) ELSE 0 END), 0) as paid_transfer
 		`).
-		Where("shop_id = ? AND created_at >= ? AND created_at <= ?", shopID, startDate, endDate).
+		Where("shop_id = ? AND DATE(created_at) >= ? AND DATE(created_at) <= ?", shopID, startDate, endDate).
 		Scan(&paymentStats)
 
 	// สิ่งที่ควรทราบ: ยอดหนี้ (debt_amount) ต้องเอาไปหักลบกับประวัติการชำระหนี้ (debt_payments)
@@ -108,7 +132,7 @@ func GetAdvancedReport(c *gin.Context) {
 		Select("products.name as product_name, SUM(sale_items.amount) as total_qty, SUM(sale_items.total_price) as total_sales").
 		Joins("JOIN sales ON sales.sale_id = sale_items.sale_id").
 		Joins("JOIN products ON products.product_id = sale_items.product_id").
-		Where("sales.shop_id = ? AND sales.created_at >= ? AND sales.created_at <= ?", shopID, startDate, endDate).
+		Where("sales.shop_id = ? AND DATE(sales.created_at) >= ? AND DATE(sales.created_at) <= ?", shopID, startDate, endDate).
 		Group("products.product_id, products.name").
 		Order("total_qty DESC").
 		Limit(5).
