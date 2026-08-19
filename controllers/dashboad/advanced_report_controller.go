@@ -141,7 +141,7 @@ func GetAdvancedReport(c *gin.Context) {
 	database.DB.Raw(`
 		WITH sale_debts AS (  
 			SELECT
-				s.sale_id, s.debtor_id, s.created_at,
+				s.sale_id, s.debtor_id, s.created_at,  
 				(s.net_price - s.pay) AS original_debt,
 				SUM(s.net_price - s.pay) OVER (
 					PARTITION BY s.debtor_id ORDER BY s.created_at, s.sale_id
