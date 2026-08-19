@@ -145,6 +145,13 @@ func ChangeEmailBeforeVerify(c *gin.Context) {
 		return
 	}
 
+	// เช็คว่าอีเมลใหม่มีคนใช้งานและ verify แล้วหรือยัง
+	var existingUser models.User
+	if err := database.DB.Where("email = ? AND is_verified = ?", input.NewEmail, true).First(&existingUser).Error; err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "อีเมลนี้มีผู้ใช้งานแล้ว กรุณาใช้อีเมลอื่น"})
+		return
+	}
+
 	var user models.User
 	if err := database.DB.Where("username = ? AND is_verified = ?", input.Username, false).First(&user).Error; err != nil {
 		c.JSON(404, gin.H{"error": "ไม่พบข้อมูลผู้ใช้ที่รอการยืนยัน"})
